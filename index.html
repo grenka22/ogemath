@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <title>ОГЭ Математика</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ==================== ЭКРАН ВХОДА ==================== -->
+  <section id="login-screen" class="screen active">
+    <div class="container">
+      <h1>📚 ОГЭ Математика</h1>
+      <div class="login-form">
+        <h2>Вход</h2>
+        <input type="text" id="login-username" placeholder="Имя пользователя">
+        <input type="password" id="login-password" placeholder="Пароль">
+        <button onclick="login()">Войти</button>
+        <p id="login-error" class="error-text"></p>
+        <p class="switch-screen">Нет аккаунта? <a href="#" onclick="showScreen('register-screen')">Зарегистрироваться</a></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== ЭКРАН РЕГИСТРАЦИИ ==================== -->
+  <section id="register-screen" class="screen hidden">
+    <div class="container">
+      <h1>📚 ОГЭ Математика</h1>
+      <div class="login-form">
+        <h2>Регистрация</h2>
+        <input type="text" id="register-username" placeholder="Придумайте имя">
+        <input type="password" id="register-password" placeholder="Придумайте пароль">
+        <input type="password" id="register-password-confirm" placeholder="Повторите пароль">
+        <button onclick="register()">Зарегистрироваться</button>
+        <p id="register-error" class="error-text"></p>
+        <p class="switch-screen">Уже есть аккаунт? <a href="#" onclick="showScreen('login-screen')">Войти</a></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== ГЛАВНОЕ МЕНЮ ==================== -->
+  <section id="main-menu" class="screen hidden">
+    <header>
+      <h2>Привет, <span id="user-name"></span>!</h2>
+      <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+        <button onclick="toggleTheme()" class="theme-toggle-btn" id="theme-toggle">🌙 Тёмная</button>
+        <button onclick="logout()" class="btn-logout">Выйти</button>
+      </div>
+    </header>
+    
+    <div class="progress-block">
+      <h3>Твой прогресс</h3>
+      <div class="progress-bar"><div id="main-progress" class="progress-fill"></div></div>
+      <span id="progress-text">0%</span>
+    </div>
+
+    <nav class="menu-grid">
+      <button onclick="showScreen('theory-screen')">📚 Теория</button>
+      <button onclick="showScreen('practice-screen')">✏️ Практика</button>
+      <button onclick="showScreen('test-screen')">📝 Тесты</button>
+      <button onclick="showScreen('profile-screen')">👤 Профиль</button>
+      <button id="admin-btn" onclick="showScreen('admin-screen')" class="hidden">🛠 Админка</button>
+    </nav>
+  </section>
+
+  <!-- ==================== ЭКРАН ТЕОРИИ ==================== -->
+  <section id="theory-screen" class="screen hidden">
+    <button onclick="showScreen('main-menu')" class="back-btn">← Назад</button>
+    <h2>📚 Теория по ОГЭ</h2>
+    <div id="theory-list" class="theory-list"></div>
+  </section>
+
+  <!-- ==================== ЭКРАН ПРАКТИКИ ==================== -->
+  <section id="practice-screen" class="screen hidden">
+    <button onclick="showScreen('main-menu')" class="back-btn">← Назад</button>
+    <h2>✏️ Практика</h2>
+    
+    <div id="topic-selection" class="topic-selection">
+      <h3>Выберите тему для практики:</h3>
+      <div class="topics-grid" id="topics-grid"></div>
+    </div>
+    
+    <div id="task-container" class="task-container hidden">
+      <div class="task-header">
+        <span id="task-counter" class="task-counter">Задача 1 из 8</span>
+        <button onclick="showTopicSelection()" class="change-topic-btn">🔄 Сменить тему</button>
+      </div>
+      
+      <h3>Задание №<span id="task-number">1</span></h3>
+      <p id="task-text" class="task-question">Загрузка задачи...</p>
+      
+      <div id="task-image-display" class="task-image-display"></div>
+      
+      <input type="text" id="user-answer" placeholder="Твой ответ">
+      <button onclick="checkAnswer()" class="check-btn">Проверить</button>
+      <div id="result-message"></div>
+      
+      <div class="nav-buttons-always">
+        <button onclick="previousTask()" class="nav-btn prev" id="prev-btn">← Предыдущая</button>
+        <button onclick="nextTask()" class="nav-btn next" id="next-btn">Следующая →</button>
+        <button onclick="solveAgain()" class="nav-btn retry" id="retry-btn">🔄 Решить ещё раз</button>
+      </div>
+      
+      <div class="hints-area">
+        <button id="hint-btn-1" onclick="showHint(1)" disabled>💡 Подсказка 1 (через 5 мин)</button>
+        <div id="hint-1-text" class="hint-text hidden"></div>
+        <button id="hint-btn-2" onclick="showHint(2)" disabled>💡 Подсказка 2 (через 8 мин)</button>
+        <div id="hint-2-text" class="hint-text hidden"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== ЭКРАН ПРОФИЛЯ ==================== -->
+  <section id="profile-screen" class="screen hidden">
+    <button onclick="showScreen('main-menu')" class="back-btn">← Назад</button>
+    <h2>👤 Личный кабинет</h2>
+    <div id="profile-stats"></div>
+  </section>
+
+  <!-- ==================== ЭКРАН ТЕСТОВ ==================== -->
+  <section id="test-screen" class="screen hidden">
+    <button onclick="showScreen('main-menu')" class="back-btn">← Назад</button>
+    <h2>📝 Тестирование</h2>
+    
+    <div id="test-topic-selection" class="topic-selection">
+      <h3>Выберите тему для теста:</h3>
+      <div class="topics-grid" id="test-topics-grid"></div>
+    </div>
+    
+    <div id="test-container" class="task-container hidden">
+      <div class="task-header">
+        <span id="test-counter" class="task-counter">Вопрос 1 из 10</span>
+        <button onclick="showTestTopicSelection()" class="change-topic-btn">🔄 Сменить тему</button>
+      </div>
+      
+      <h3>Вопрос №<span id="test-question-number">1</span></h3>
+      <div id="test-image-display" class="task-image-display"></div>
+      <p id="test-question-text" class="task-question">Загрузка вопроса...</p>
+      
+      <div id="test-answers" class="test-answers"></div>
+      <div id="test-result-message"></div>
+      
+      <div class="nav-buttons-always">
+        <button onclick="previousTestQuestion()" class="nav-btn prev" id="test-prev-btn">← Предыдущий</button>
+        <button onclick="nextTestQuestion()" class="nav-btn next" id="test-next-btn">Следующий →</button>
+        <button onclick="finishTest()" class="nav-btn retry" id="test-finish-btn">✅ Завершить тест</button>
+      </div>
+      
+      <div id="test-final-result" class="test-final-result hidden">
+        <h3>🎉 Тест завершён!</h3>
+        <p>Правильных ответов: <span id="test-correct-count">0</span> из <span id="test-total-count">0</span></p>
+        <p>Процент: <span id="test-percent">0</span>%</p>
+        <button onclick="restartTest()" class="restart-btn">🔄 Пройти ещё раз</button>
+        <button onclick="showTestTopicSelection()" class="check-btn">📚 Другая тема</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== ЭКРАН АДМИНКИ ==================== -->
+  <section id="admin-screen" class="screen hidden">
+    <button onclick="showScreen('main-menu')" class="back-btn">← Назад</button>
+    <h2>🛠 Панель админа</h2>
+    
+    <div class="admin-tabs">
+      <button onclick="showAdminTab('users')" class="admin-tab-btn active">👥 Пользователи</button>
+      <button onclick="showAdminTab('tasks')" class="admin-tab-btn">📝 Задания</button>
+      <button onclick="showAdminTab('tests')" class="admin-tab-btn">📋 Тесты</button>
+      <button onclick="showAdminTab('theory')" class="admin-tab-btn">📚 Теория</button>
+      <button onclick="showAdminTab('add-task')" class="admin-tab-btn">➕ Добавить задание</button>
+    </div>
+    
+    <!-- Вкладка: Пользователи -->
+    <div id="admin-users" class="admin-tab-content">
+      <h3>Все пользователи</h3>
+      <div id="users-list" class="users-list"></div>
+    </div>
+    
+    <!-- Вкладка: Задания -->
+    <div id="admin-tasks" class="admin-tab-content hidden">
+      <h3>Список заданий</h3>
+      <div id="tasks-list" class="tasks-list"></div>
+    </div>
+    
+    <!-- Вкладка: Тесты -->
+    <div id="admin-tests" class="admin-tab-content hidden">
+      <h3>Управление тестами</h3>
+      <div id="tests-list-admin" class="tests-list-admin"></div>
+      
+      <h4 style="margin-top: 30px;">Добавить вопрос для теста</h4>
+      <div class="form-group">
+        <label>Тема:</label>
+        <select id="test-question-topic">
+          <option value="fractions">Дроби и проценты</option>
+          <option value="powers">Степени и корни</option>
+          <option value="equations">Уравнения</option>
+          <option value="geometry">Геометрия</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Вопрос:</label>
+        <textarea id="test-question-text" placeholder="Текст вопроса..."></textarea>
+      </div>
+      <div class="form-group">
+        <label>Ссылка на изображение (необязательно):</label>
+        <input type="text" id="test-question-image-url" placeholder="https://i.postimg.cc/...">
+        <p style="font-size: 12px; color: #888; margin-top: 5px;">
+          💡 Загрузи картинку на <a href="https://postimages.org/" target="_blank">Postimages</a>
+        </p>
+        <div id="test-image-preview" style="margin-top: 10px;"></div>
+      </div>
+      <div class="form-group"><label>Вариант 1:</label><input type="text" id="test-option-1"></div>
+      <div class="form-group"><label>Вариант 2:</label><input type="text" id="test-option-2"></div>
+      <div class="form-group"><label>Вариант 3:</label><input type="text" id="test-option-3"></div>
+      <div class="form-group"><label>Вариант 4:</label><input type="text" id="test-option-4"></div>
+      <div class="form-group">
+        <label>Правильный ответ (1-4):</label>
+        <select id="test-correct-option">
+          <option value="1">Вариант 1</option>
+          <option value="2">Вариант 2</option>
+          <option value="3">Вариант 3</option>
+          <option value="4">Вариант 4</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Объяснение:</label>
+        <textarea id="test-question-explanation" placeholder="Почему этот ответ правильный..."></textarea>
+      </div>
+      <button onclick="addTestQuestion()" class="save-btn">💾 Сохранить вопрос</button>
+      <p id="test-admin-message"></p>
+    </div>
+    
+    <!-- Вкладка: Теория -->
+    <div id="admin-theory" class="admin-tab-content hidden">
+      <h3>Управление теорией</h3>
+      <div id="theory-list-admin" class="theory-list-admin"></div>
+      
+      <h4 style="margin-top: 30px;">Добавить/Редактировать теорию</h4>
+      <div class="form-group">
+        <label>Номер задания:</label>
+        <input type="text" id="theory-number" placeholder="Задание №1">
+      </div>
+      <div class="form-group">
+        <label>Название темы:</label>
+        <input type="text" id="theory-title" placeholder="Дроби и проценты">
+      </div>
+      <div class="form-group">
+        <label>Содержание (можно использовать HTML):</label>
+        <textarea id="theory-content" placeholder="<h3>Правила:</h3><p>Текст...</p>" style="min-height: 150px;"></textarea>
+      </div>
+      <button onclick="saveTheory()" class="save-btn">💾 Сохранить теорию</button>
+      <p id="theory-message"></p>
+    </div>
+    
+    <!-- Вкладка: Добавить задание -->
+    <div id="admin-add-task" class="admin-tab-content hidden">
+      <h3>Добавить новое задание</h3>
+      <div class="form-group">
+        <label>Номер задания:</label>
+        <input type="number" id="new-task-number" placeholder="1">
+      </div>
+      <div class="form-group">
+        <label>Тема:</label>
+        <select id="new-task-topic">
+          <option value="fractions">Дроби и проценты</option>
+          <option value="powers">Степени и корни</option>
+          <option value="equations">Уравнения</option>
+          <option value="geometry">Геометрия</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Вопрос:</label>
+        <textarea id="new-task-question" placeholder="Текст задачи"></textarea>
+      </div>
+      
+      <div class="form-group">
+        <label>Ссылка на изображение (необязательно):</label>
+        <input type="text" id="new-task-image-url" placeholder="https://i.postimg.cc/...">
+        <p style="font-size: 12px; color: #888; margin-top: 5px;">
+          💡 Загрузи картинку на <a href="https://postimages.org/" target="_blank">Postimages</a>
+        </p>
+        <div id="image-preview" style="margin-top: 10px;"></div>
+      </div>
+      
+      <div class="form-group">
+        <label>Правильный ответ:</label>
+        <input type="text" id="new-task-answer" placeholder="50">
+      </div>
+      <div class="form-group">
+        <label>Объяснение:</label>
+        <textarea id="new-task-explanation" placeholder="Как решать..."></textarea>
+      </div>
+      <div class="form-group">
+        <label>Простое объяснение:</label>
+        <textarea id="new-task-simple" placeholder="Объяснение для детей..."></textarea>
+      </div>
+      <div class="form-group">
+        <label>Подсказка 1:</label>
+        <textarea id="new-task-hint1" placeholder="Первая подсказка..."></textarea>
+      </div>
+      <div class="form-group">
+        <label>Подсказка 2:</label>
+        <textarea id="new-task-hint2" placeholder="Вторая подсказка..."></textarea>
+      </div>
+      <button onclick="addNewTask()" class="save-btn">💾 Сохранить задание</button>
+      <p id="admin-message"></p>
+    </div>
+  </section>
+
+  <!-- ==================== МОДАЛЬНОЕ ОКНО: ИГРА НА ПАМЯТЬ ==================== -->
+  <div id="memory-game-modal" class="modal hidden">
+    <div class="modal-content">
+      <button onclick="closeMemoryGame()" class="modal-close">✕ Закрыть</button>
+      
+      <div class="game-header">
+        <h2>🧠 Тренировка памяти</h2>
+        <p>Запомни формулы и правила для ОГЭ</p>
+      </div>
+      
+      <div class="game-stats">
+        <div class="stat">
+          <span class="stat-label">Ходы:</span>
+          <span id="game-moves" class="stat-value">0</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Время:</span>
+          <span id="game-time" class="stat-value">0:00</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Пары:</span>
+          <span id="game-pairs" class="stat-value">0/8</span>
+        </div>
+      </div>
+      
+      <div class="game-board" id="game-board"></div>
+      
+      <div class="game-result hidden" id="game-result">
+        <h3>✅ Отлично!</h3>
+        <p>Ты нашёл все пары за <span id="final-time"></span> и <span id="final-moves"></span> ходов!</p>
+        <button onclick="restartMemoryGame()" class="restart-btn">🔄 Сыграть ещё раз</button>
+      </div>
+      
+      <div class="game-info">
+        <p>💡 <strong>Совет:</strong> Запоминай расположение карточек — это поможет на экзамене!</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== FIREBASE SDK ==================== -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+    import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
+    import { getFirestore, doc, setDoc, getDoc, getDocs, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAacTEeBdmUHDVc0tgPKnetNqVvc5aJYpE",
+      authDomain: "math-d237c.firebaseapp.com",
+      projectId: "math-d237c",
+      storageBucket: "math-d237c.appspot.com",
+      messagingSenderId: "954597279240",
+      appId: "1:954597279240:web:7fb23ebfcc3033cc9ab3bd",
+      measurementId: "G-QC5PSZQX7W"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    // Глобальные переменные
+    window.auth = auth;
+    window.db = db;
+    window.createUserWithEmailAndPassword = createUserWithEmailAndPassword;
+    window.signInWithEmailAndPassword = signInWithEmailAndPassword;
+    window.signOut = signOut;
+    window.onAuthStateChanged = onAuthStateChanged;
+    window.doc = doc;
+    window.setDoc = setDoc;
+    window.getDoc = getDoc;
+    window.getDocs = getDocs;
+    window.collection = collection;
+    window.deleteDoc = deleteDoc;
+
+    console.log("✅ Firebase подключен!");
+  </script>
+
+  <script src="script.js"></script>
+</body>
+</html>
