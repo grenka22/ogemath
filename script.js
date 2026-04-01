@@ -7,6 +7,7 @@ let currentTaskId = null;
 let hintTimers = {};
 let currentTopicFilter = "all";
 let forumPosts = [];
+let currentPostId = null;
 
 // ==================== ДАННЫЕ ====================
 let theoryData = [];
@@ -421,10 +422,15 @@ async function openPost(postId) {
   const post = forumPosts.find(p => p.id === postId);
   if (!post) return;
   
+  currentPostId = postId;
   const container = document.getElementById('posts-list');
   if (!container) return;
   
   const time = post.createdAt?.seconds ? new Date(post.createdAt.seconds * 1000).toLocaleString('ru-RU') : '';
+  const isAdmin = currentUser?.uid === ADMIN_UID;
+  
+  // Загружаем комментарии
+  await loadComments(postId);
   
   container.innerHTML = `
     <button onclick="showForum()" class="back-btn">← Назад</button>
@@ -432,10 +438,12 @@ async function openPost(postId) {
     <div class="forum-post-full">
       <div class="forum-post-header">
         <h2>${post.title}</h2>
-        <div>
-          <button onclick="editPost('${post.id}')" class="edit-btn" style="margin-right: 10px;">✏️ Редактировать</button>
-          <button onclick="deletePost('${post.id}')" class="delete-btn">🗑 Удалить</button>
-        </div>
+        ${isAdmin ? `
+          <div>
+            <button onclick="editPost('${post.id}')" class="edit-btn" style="margin-right: 10px;">✏️ Редактировать</button>
+            <button onclick="deletePost('${post.id}')" class="delete-btn">🗑 Удалить</button>
+          </div>
+        ` : ''}
       </div>
       <div class="forum-post-meta">
         <span class="forum-post-author">👤 ${post.authorName}</span>
@@ -443,7 +451,21 @@ async function openPost(postId) {
       </div>
       <div class="forum-post-content">${post.content.replace(/\n/g, '<br>')}</div>
     </div>
+    
+    <!-- Комментарии -->
+    <div class="comments-section" style="margin-top: 30px;">
+      <h3>💬 Комментарии (${post.comments?.length || 0})</h3>
+      
+      <div class="new-comment-form" style="margin: 20px 0;">
+        <textarea id="new-comment-text" placeholder="Написать комментарий..." style="width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 5px; border: 2px solid #00ff88; background: #1a1a1a; color: #e0e0e0; min-height: 80px;"></textarea>
+        <button onclick="addComment()" class="save-btn" style="width: auto;">📤 Отправить</button>
+      </div>
+      
+      <div id="comments-list" class="comments-list"></div>
+    </div>
   `;
+  
+  renderComments();
 }
 
 async function editPost(postId) {
@@ -478,6 +500,78 @@ async function deletePost(postId) {
     await loadForumPosts();
     showForum();
     alert('✅ Удалено!');
+  } catch (e) {
+    alert('❌ Ошибка: ' + e.message);
+  }
+}
+
+// Загрузка комментариев
+async function loadComments(postId) {
+  try {
+    const snapshot = await window.getDocs(window.collection(window.db, "comments"));
+    const post = forumPosts.find(p => p.id === postId);
+    if (post) {
+      post.comments = [];
+      snapshot.forEach(doc => {
+        const comment = { id: doc.id, ...doc.data() };
+        if (comment.postId === postId) {
+          post.comments.push(comment);
+        }
+      });
+      post.comments.sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+    }
+  } catch (e) { console.error("❌ Ошибка загрузки комментариев:", e); }
+}
+
+// Отображение комментариев
+function renderComments() {
+  const container = document.getElementById('comments-list');
+  if (!container) return;
+  
+  const post = forumPosts.find(p => p.id === currentPostId);
+  if (!post || !post.comments) return;
+  
+  if (post.comments.length === 0) {
+    container.innerHTML = '<p style="color: #888; text-align: center; padding: 20px;">Пока нет комментариев. Будьте первыми!</p>';
+    return;
+  }
+  
+  container.innerHTML = post.comments.map(comment => {
+    const time = comment.createdAt?.seconds ? new Date(comment.createdAt.seconds * 1000).toLocaleString('ru-RU') : '';
+    return `
+      <div class="comment" style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; margin: 10px 0; border-left: 3px solid #00ff88;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 13px;">
+          <span style="color: #00ff88; font-weight: bold;">👤 ${comment.authorName}</span>
+          <span style="color: #666;">${time}</span>
+        </div>
+        <div style="color: #e0e0e0; line-height: 1.6;">${comment.content.replace(/\n/g, '<br>')}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+// Добавление комментария
+async function addComment() {
+  const text = document.getElementById('new-comment-text')?.value.trim();
+  if (!text) { alert('❌ Введите текст комментария!'); return; }
+  
+  try {
+    const newComment = {
+      postId: currentPostId,
+      content: text,
+      authorId: currentUser.uid,
+      authorName: currentUsername || 'Пользователь',
+      createdAt: new Date()
+    };
+    
+    await window.setDoc(window.doc(window.collection(window.db, "comments")), newComment);
+    
+    document.getElementById('new-comment-text').value = '';
+    await loadComments(currentPostId);
+    renderComments();
+    await loadForumPosts(); // Обновить счётчик
+    showForum(); // Перезагрузить чтобы обновился счётчик
+    openPost(currentPostId);
   } catch (e) {
     alert('❌ Ошибка: ' + e.message);
   }
