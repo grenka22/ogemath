@@ -1,6 +1,5 @@
 // ==================== КОНСТАНТЫ ====================
-// ⚠️ ВСТАВЬ СЮДА СВОЙ UID АДМИНА ИЗ FIREBASE AUTHENTICATION!
-const ADMIN_UID = "F0RuVaEotpWX0D7dYgW3Evsk7oo1";
+const ADMIN_UID = "F0RuVaEotpWX0D7dYgW3Evsk7oo1"; // ← ВСТАВЬ СВОЙ UID!
 
 let currentUser = null;
 let currentUsername = null;
@@ -12,6 +11,7 @@ let currentTopicFilter = "all";
 let theoryData = [];
 let practiceData = [];
 let testData = [];
+let forumPosts = [];
 
 const topicsList = [
   { id: "all", name: "🎲 Все темы" },
@@ -31,10 +31,10 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 
   loadTheme();
-
   await loadTheoryFromFirebase();
   await loadPracticeFromFirebase();
   await loadTestsFromFirebase();
+  await loadForumPosts();
 
   window.onAuthStateChanged(window.auth, async (user) => {
     if (user) {
@@ -49,7 +49,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       await loadUserData();
       
       showMemoryGame();
-      checkChatAccess();
+      checkForumAccess();
     } else {
       currentUser = null;
       currentUsername = null;
@@ -96,6 +96,40 @@ async function loadTestsFromFirebase() {
     }
     console.log("📋 Тесты загружены:", testData.length);
   } catch (e) { console.error("❌ Ошибка загрузки тестов:", e); testData = []; }
+}
+
+async function loadForumPosts() {
+  try {
+    const snapshot = await window.getDocs(window.collection(window.db, "forum_posts"));
+    forumPosts = [];
+    if (!snapshot.empty) {
+      snapshot.forEach(doc => { 
+        const post = { id: doc.id, ...doc.data() };
+        // Загружаем комментарии для каждого поста
+        loadPostComments(post.id);
+        forumPosts.push(post);
+      });
+    }
+    forumPosts.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+    console.log("📢 Объявления загружены:", forumPosts.length);
+  } catch (e) { console.error("❌ Ошибка загрузки объявлений:", e); forumPosts = []; }
+}
+
+async function loadPostComments(postId) {
+  try {
+    const snapshot = await window.getDocs(window.collection(window.db, "forum_comments"));
+    const post = forumPosts.find(p => p.id === postId);
+    if (post) {
+      post.comments = [];
+      snapshot.forEach(doc => {
+        const comment = { id: doc.id, ...doc.data() };
+        if (comment.postId === postId) {
+          post.comments.push(comment);
+        }
+      });
+      post.comments.sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+    }
+  } catch (e) { console.error("❌ Ошибка загрузки комментариев:", e); }
 }
 
 // ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
@@ -147,6 +181,7 @@ function showScreen(screenId) {
   if (screenId === 'practice-screen') showTopicSelection();
   if (screenId === 'profile-screen') loadProfileStats();
   if (screenId === 'test-screen') { loadTestsFromFirebase(); showTestTopicSelection(); }
+  if (screenId === 'forum-screen') { loadForumPosts(); showForum(); }
 }
 
 // ==================== АВТОРИЗАЦИЯ ====================
@@ -164,7 +199,7 @@ async function register() {
     const cred = await window.createUserWithEmailAndPassword(window.auth, fakeEmail, password);
     await window.setDoc(window.doc(window.db, "users", cred.user.uid), {
       username, email: fakeEmail, createdAt: new Date(),
-      progress: {}, mistakes: [], isAdmin: false, hasChatAccess: false
+      progress: {}, mistakes: [], isAdmin: false, hasForumAccess: false
     });
     alert('✅ Регистрация успешна! Теперь войдите.');
     showScreen('login-screen');
@@ -220,9 +255,7 @@ function showTheoryDetail(id) {
 
 // ==================== ПРАКТИКА ====================
 function getTasksForCurrentTopic() { return currentTopicFilter === "all" ? practiceData : practiceData.filter(t => t.topic === currentTopicFilter); }
-
 function showTopicSelection() { document.getElementById('topic-selection')?.classList.remove('hidden'); document.getElementById('task-container')?.classList.add('hidden'); initTopics(); }
-
 function startTopicPractice(topicId) { currentTopicFilter = topicId; document.getElementById('topic-selection')?.classList.add('hidden'); document.getElementById('task-container')?.classList.remove('hidden'); loadTaskForIndex(1); }
 
 function loadTaskForIndex(index) {
@@ -316,13 +349,227 @@ async function loadProfileStats() {
   }
 }
 
+// ==================== ФОРУМ/ОБЪЯВЛЕНИЯ ====================
+let currentPostId = null;
+
+function checkForumAccess() {
+  // Кнопка форума видна всем (или можно скрыть для тех у кого нет доступа)
+  const forumBtn = document.getElementById('forum-btn');
+  if (forumBtn) forumBtn.classList.remove('hidden');
+}
+
+function showForum() {
+  loadForumPosts();
+  const container = document.getElementById('forum-content');
+  if (!container) return;
+  
+  const isAdmin = currentUser?.uid === ADMIN_UID;
+  
+  container.innerHTML = `
+    <div class="forum-header">
+      <h3>📢 Объявления и обсуждения</h3>
+      ${isAdmin ? '<button onclick="showNewPostForm()" class="save-btn" style="width: auto; padding: 10px 20px; margin-top: 0;">➕ Новый пост</button>' : ''}
+    </div>
+    <div id="new-post-form" class="hidden" style="margin: 20px 0; padding: 20px; background: rgba(0, 255, 136, 0.1); border-radius: 10px;">
+      <input type="text" id="new-post-title" placeholder="Заголовок" style="width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 5px; border: 2px solid #00ff88; background: #1a1a1a; color: #e0e0e0;">
+      <textarea id="new-post-content" placeholder="Текст объявления..." style="width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 5px; border: 2px solid #00ff88; background: #1a1a1a; color: #e0e0e0; min-height: 100px;"></textarea>
+      <button onclick="createNewPost()" class="save-btn" style="width: auto;">💾 Опубликовать</button>
+      <button onclick="hideNewPostForm()" class="back-btn" style="width: auto; margin-left: 10px;">✕ Отмена</button>
+    </div>
+    <div id="posts-list" class="forum-posts"></div>
+  `;
+  
+  renderPostsList();
+}
+
+function showNewPostForm() {
+  document.getElementById('new-post-form')?.classList.remove('hidden');
+}
+
+function hideNewPostForm() {
+  document.getElementById('new-post-form')?.classList.add('hidden');
+  document.getElementById('new-post-title').value = '';
+  document.getElementById('new-post-content').value = '';
+}
+
+async function createNewPost() {
+  const title = document.getElementById('new-post-title')?.value.trim();
+  const content = document.getElementById('new-post-content')?.value.trim();
+  
+  if (!title || !content) {
+    alert('❌ Заполните заголовок и текст!');
+    return;
+  }
+  
+  try {
+    const newPost = {
+      title,
+      content,
+      authorId: currentUser.uid,
+      authorName: currentUsername || 'Админ',
+      createdAt: new Date(),
+      commentsCount: 0
+    };
+    
+    await window.setDoc(window.doc(window.collection(window.db, "forum_posts")), newPost);
+    
+    hideNewPostForm();
+    loadForumPosts();
+    renderPostsList();
+    alert('✅ Пост опубликован!');
+  } catch (e) {
+    alert('❌ Ошибка: ' + e.message);
+  }
+}
+
+function renderPostsList() {
+  const container = document.getElementById('posts-list');
+  if (!container) return;
+  
+  if (forumPosts.length === 0) {
+    container.innerHTML = '<p style="text-align: center; color: #888; padding: 40px;">Пока нет объявлений</p>';
+    return;
+  }
+  
+  container.innerHTML = forumPosts.map(post => {
+    const time = post.createdAt?.seconds ? new Date(post.createdAt.seconds * 1000).toLocaleDateString('ru-RU') : '';
+    const commentsCount = post.comments?.length || 0;
+    
+    return `
+      <div class="forum-post" onclick="openPost('${post.id}')">
+        <div class="forum-post-header">
+          <h4>${post.title}</h4>
+          <span class="forum-post-author">${post.authorName}</span>
+        </div>
+        <p class="forum-post-preview">${post.content.substring(0, 150)}${post.content.length > 150 ? '...' : ''}</p>
+        <div class="forum-post-footer">
+          <span class="forum-post-date">${time}</span>
+          <span class="forum-post-comments">💬 ${commentsCount} ответов</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function openPost(postId) {
+  const post = forumPosts.find(p => p.id === postId);
+  if (!post) return;
+  
+  currentPostId = postId;
+  const container = document.getElementById('posts-list');
+  if (!container) return;
+  
+  const time = post.createdAt?.seconds ? new Date(post.createdAt.seconds * 1000).toLocaleString('ru-RU') : '';
+  const isAdmin = currentUser?.uid === ADMIN_UID;
+  const hasAccess = await checkUserForumAccess();
+  
+  container.innerHTML = `
+    <button onclick="showForum()" class="back-btn">← Назад к списку</button>
+    
+    <div class="forum-post-full">
+      <div class="forum-post-header">
+        <h2>${post.title}</h2>
+        ${isAdmin ? '<button onclick="deletePost(\'' + post.id + '\')" class="delete-btn" style="margin-left: auto;">🗑 Удалить</button>' : ''}
+      </div>
+      <div class="forum-post-meta">
+        <span class="forum-post-author">👤 ${post.authorName}</span>
+        <span class="forum-post-date">📅 ${time}</span>
+      </div>
+      <div class="forum-post-content">${post.content.replace(/\n/g, '<br>')}</div>
+    </div>
+    
+    <div class="forum-comments">
+      <h3>💬 Комментарии (${post.comments?.length || 0})</h3>
+      
+      ${hasAccess ? `
+        <div class="new-comment-form">
+          <textarea id="new-comment-text" placeholder="Написать ответ..." style="width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 5px; border: 2px solid #00ff88; background: #1a1a1a; color: #e0e0e0; min-height: 80px;"></textarea>
+          <button onclick="addComment()" class="save-btn" style="width: auto;">📤 Отправить</button>
+        </div>
+      ` : '<p style="color: #888;">🔒 Только избранные пользователи могут комментировать</p>'}
+      
+      <div id="comments-list" class="comments-list">
+        ${(post.comments || []).map(comment => {
+          const commentTime = comment.createdAt?.seconds ? new Date(comment.createdAt.seconds * 1000).toLocaleString('ru-RU') : '';
+          return `
+            <div class="comment">
+              <div class="comment-header">
+                <span class="comment-author">👤 ${comment.authorName}</span>
+                <span class="comment-date">${commentTime}</span>
+              </div>
+              <div class="comment-content">${comment.content.replace(/\n/g, '<br>')}</div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+async function checkUserForumAccess() {
+  if (!currentUser) return false;
+  if (currentUser.uid === ADMIN_UID) return true;
+  
+  try {
+    const doc = await window.getDoc(window.doc(window.db, "users", currentUser.uid));
+    if (doc.exists()) {
+      return doc.data().hasForumAccess === true;
+    }
+  } catch (e) { console.error("Ошибка проверки доступа:", e); }
+  return false;
+}
+
+async function addComment() {
+  const text = document.getElementById('new-comment-text')?.value.trim();
+  if (!text) { alert('❌ Введите текст комментария!'); return; }
+  
+  try {
+    const newComment = {
+      postId: currentPostId,
+      content: text,
+      authorId: currentUser.uid,
+      authorName: currentUsername || 'Пользователь',
+      createdAt: new Date()
+    };
+    
+    await window.setDoc(window.doc(window.collection(window.db, "forum_comments")), newComment);
+    
+    document.getElementById('new-comment-text').value = '';
+    loadForumPosts();
+    openPost(currentPostId);
+  } catch (e) {
+    alert('❌ Ошибка: ' + e.message);
+  }
+}
+
+async function deletePost(postId) {
+  if (!confirm('Удалить этот пост?')) return;
+  
+  try {
+    await window.deleteDoc(window.doc(window.db, "forum_posts", postId));
+    
+    // Удаляем комментарии
+    const snapshot = await window.getDocs(window.collection(window.db, "forum_comments"));
+    snapshot.forEach(async doc => {
+      if (doc.data().postId === postId) {
+        await window.deleteDoc(window.doc(window.db, "forum_comments", doc.id));
+      }
+    });
+    
+    loadForumPosts();
+    showForum();
+  } catch (e) {
+    alert('❌ Ошибка: ' + e.message);
+  }
+}
+
 // ==================== АДМИНКА ====================
 function showAdminTab(tabName) {
   document.querySelectorAll('.admin-tab-content').forEach(t => t.classList.add('hidden'));
   document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('admin-' + tabName)?.classList.remove('hidden');
   if (event?.target) event.target.classList.add('active');
-  if (tabName === 'users') loadAllUsers(); else if (tabName === 'tasks') loadAllTasks(); else if (tabName === 'tests') loadTestsAdmin(); else if (tabName === 'theory') loadTheoryAdmin();
+  if (tabName === 'users') loadAllUsers(); else if (tabName === 'tasks') loadAllTasks(); else if (tabName === 'tests') loadTestsAdmin(); else if (tabName === 'theory') loadTheoryAdmin(); else if (tabName === 'forum') loadForumAdmin();
 }
 
 async function loadAllUsers() {
@@ -331,10 +578,18 @@ async function loadAllUsers() {
     const snap = await window.getDocs(window.collection(window.db, "users"));
     if (snap.empty) { list.innerHTML = '<p>Пользователей нет</p>'; return; }
     list.innerHTML = Array.from(snap.docs).map(d => {
-      const data = d.data(); const prog = data.progress || {}; const errs = data.mistakes || []; const hasChat = data.hasChatAccess === true;
-      return `<div class="user-card"><h4>${data.username||'Без имени'} (${data.email||'нет'})</h4><p>Зарегистрирован: ${data.createdAt ? new Date(data.createdAt.seconds*1000).toLocaleDateString() : '?'}</p><p>Выполнено: ${Object.keys(prog).length} | Ошибок: ${errs.length}</p><p>Статус: ${data.isAdmin ? '👑 Админ' : '👤 Ученик'}</p><p>Чат: ${hasChat ? '✅ Доступен' : '❌ Запрещён'}</p><button onclick="toggleChatAccess('${d.id}', ${hasChat})" class="${hasChat ? 'delete-btn' : 'edit-btn'}" style="margin-top: 10px;">${hasChat ? '❌ Забрать доступ к чату' : '✅ Дать доступ к чату'}</button></div>`;
+      const data = d.data(); const prog = data.progress || {}; const errs = data.mistakes || []; const hasForum = data.hasForumAccess === true;
+      return `<div class="user-card"><h4>${data.username||'Без имени'} (${data.email||'нет'})</h4><p>Зарегистрирован: ${data.createdAt ? new Date(data.createdAt.seconds*1000).toLocaleDateString() : '?'}</p><p>Выполнено: ${Object.keys(prog).length} | Ошибок: ${errs.length}</p><p>Статус: ${data.isAdmin ? '👑 Админ' : '👤 Ученик'}</p><p>Форум: ${hasForum ? '✅ Доступен' : '❌ Запрещён'}</p><button onclick="toggleForumAccess('${d.id}', ${hasForum})" class="${hasForum ? 'delete-btn' : 'edit-btn'}" style="margin-top: 10px;">${hasForum ? '❌ Забрать доступ' : '✅ Дать доступ'}</button></div>`;
     }).join('');
   } catch (e) { list.innerHTML = `<p class="error">Ошибка: ${e.message}</p>`; }
+}
+
+async function toggleForumAccess(userId, currentlyHas) {
+  try {
+    await window.setDoc(window.doc(window.db, "users", userId), { hasForumAccess: !currentlyHas }, { merge: true });
+    loadAllUsers();
+    alert(`✅ Доступ ${!currentlyHas ? 'выдан' : 'забран'}!`);
+  } catch (e) { console.error("Ошибка:", e); alert("Ошибка: " + e.message); }
 }
 
 function loadAllTasks() {
@@ -455,284 +710,3 @@ function restartMemoryGame() { initMemoryGame(); }
 function loadTheme() { const savedTheme = localStorage.getItem('theme') || 'dark'; applyTheme(savedTheme); }
 function applyTheme(theme) { const body = document.body; const toggleBtn = document.getElementById('theme-toggle'); if (theme === 'light') { body.classList.add('light-theme'); if (toggleBtn) toggleBtn.textContent = '☀️ Светлая'; } else { body.classList.remove('light-theme'); if (toggleBtn) toggleBtn.textContent = '🌙 Тёмная'; } localStorage.setItem('theme', theme); }
 function toggleTheme() { const body = document.body; const isLight = body.classList.contains('light-theme'); applyTheme(isLight ? 'dark' : 'light'); }
-
-// ==================== ЧАТ С УВЕДОМЛЕНИЯМИ ====================
-let chatListener = null;
-let currentChatUser = null;
-let unreadMessages = {};
-
-async function checkChatAccess() {
-  if (!currentUser) return;
-  const chatBtn = document.getElementById('chat-btn');
-  if (!chatBtn) return;
-  
-  try {
-    const userDoc = await window.getDoc(window.doc(window.db, "users", currentUser.uid));
-    if (userDoc.exists()) {
-      const data = userDoc.data();
-      const isAdmin = data.isAdmin === true;
-      const hasChat = data.hasChatAccess === true;
-      
-      console.log("🔍 Проверка чата:", { uid: currentUser.uid, isAdmin, hasChat });
-      
-      if (isAdmin || hasChat) {
-        chatBtn.classList.remove('hidden');
-        if (isAdmin) {
-          document.getElementById('admin-chat-section')?.classList.remove('hidden');
-          document.getElementById('admin-chat-manage')?.classList.remove('hidden');
-          loadUsersForChat();
-          loadUnreadCount();
-        } else {
-          document.getElementById('admin-chat-section')?.classList.add('hidden');
-          document.getElementById('admin-chat-manage')?.classList.add('hidden');
-          loadUnreadCountForUser();
-        }
-      } else {
-        chatBtn.classList.add('hidden');
-      }
-    }
-  } catch (e) { console.error("Ошибка проверки доступа к чату:", e); }
-}
-
-function toggleChat() {
-  const panel = document.getElementById('chat-panel');
-  if (!panel) return;
-  if (panel.classList.contains('hidden')) {
-    panel.classList.remove('hidden');
-    loadChatMessages();
-    clearUnreadBadge();
-  } else {
-    panel.classList.add('hidden');
-    if (chatListener) { chatListener(); chatListener = null; }
-  }
-}
-
-async function loadUsersForChat() {
-  const select = document.getElementById('chat-user-select');
-  const list = document.getElementById('users-access-list');
-  if (!select) return;
-  
-  try {
-    const snapshot = await window.getDocs(window.collection(window.db, "users"));
-    select.innerHTML = '<option value="">Выберите пользователя...</option>';
-    if (list) list.innerHTML = '';
-    
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      if (doc.id === currentUser.uid) return;
-      const userName = data.username || data.email || 'Без имени';
-      const hasChat = data.hasChatAccess === true;
-      
-      const option = document.createElement('option');
-      option.value = doc.id;
-      option.textContent = `${userName} ${hasChat ? '✅' : ''}`;
-      select.appendChild(option);
-      
-      if (list) {
-        const item = document.createElement('div');
-        item.className = 'user-access-item';
-        item.style.cssText = 'display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #333;';
-        item.innerHTML = `<span style="color: #e0e0e0;">${userName}</span><button class="${hasChat ? 'revoke-btn' : 'grant-btn'}" onclick="toggleChatAccess('${doc.id}', ${hasChat})" style="padding: 5px 10px; border: none; border-radius: 5px; cursor: pointer; font-size: 12px; background: ${hasChat ? '#ff4444' : '#00ff88'}; color: ${hasChat ? 'white' : '#0a0a0a'};">${hasChat ? '❌ Забрать' : '✅ Дать'}</button>`;
-        list.appendChild(item);
-      }
-    });
-    
-    select.onchange = (e) => { 
-      currentChatUser = e.target.value; 
-      console.log("👤 Выбран пользователь:", currentChatUser);
-      loadChatMessages(); 
-    };
-  } catch (e) { console.error("Ошибка загрузки пользователей:", e); }
-}
-
-async function toggleChatAccess(userId, currentlyHas) {
-  try {
-    await window.setDoc(window.doc(window.db, "users", userId), { hasChatAccess: !currentlyHas }, { merge: true });
-    loadUsersForChat();
-    alert(`✅ Доступ ${!currentlyHas ? 'выдан' : 'забран'}!`);
-  } catch (e) { console.error("Ошибка:", e); alert("Ошибка: " + e.message); }
-}
-
-async function loadUnreadCount() {
-  try {
-    const snapshot = await window.getDocs(window.collection(window.db, "messages"));
-    const counts = {};
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      if (data.to === currentUser.uid && !data.read) {
-        counts[data.from] = (counts[data.from] || 0) + 1;
-      }
-    });
-    unreadMessages = counts;
-    console.log("📊 Непрочитанные для админа:", counts);
-    updateChatBadge();
-  } catch (e) { console.error("Ошибка загрузки непрочитанных:", e); }
-}
-
-async function loadUnreadCountForUser() {
-  try {
-    const snapshot = await window.getDocs(window.collection(window.db, "messages"));
-    let count = 0;
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      if (data.to === currentUser.uid && data.from === ADMIN_UID && !data.read) {
-        count++;
-      }
-    });
-    unreadMessages = { [ADMIN_UID]: count };
-    console.log("📊 Непрочитанные для пользователя:", count);
-    updateChatBadge();
-  } catch (e) { console.error("Ошибка загрузки непрочитанных:", e); }
-}
-
-function updateChatBadge() {
-  const chatBtn = document.getElementById('chat-btn');
-  if (!chatBtn) return;
-  
-  const oldBadge = chatBtn.querySelector('.chat-badge');
-  if (oldBadge) oldBadge.remove();
-  
-  let total = 0;
-  if (document.getElementById('admin-chat-section')?.classList.contains('hidden')) {
-    total = unreadMessages[ADMIN_UID] || 0;
-  } else {
-    total = Object.values(unreadMessages).reduce((a, b) => a + b, 0);
-  }
-  
-  console.log("🔔 Обновление бейджа:", total);
-  
-  if (total > 0) {
-    const badge = document.createElement('span');
-    badge.className = 'chat-badge';
-    badge.textContent = total > 99 ? '99+' : total;
-    chatBtn.appendChild(badge);
-  }
-}
-
-function clearUnreadBadge() {
-  const chatBtn = document.getElementById('chat-btn');
-  if (!chatBtn) return;
-  const badge = chatBtn.querySelector('.chat-badge');
-  if (badge) badge.remove();
-  markMessagesAsRead();
-}
-
-async function markMessagesAsRead() {
-  if (!currentUser) return;
-  try {
-    let chatWith = ADMIN_UID;
-    const adminSection = document.getElementById('admin-chat-section');
-    if (adminSection && !adminSection.classList.contains('hidden') && currentChatUser) {
-      chatWith = currentChatUser;
-    }
-    
-    const snapshot = await window.getDocs(window.collection(window.db, "messages"));
-    let updated = 0;
-    snapshot.forEach(async doc => {
-      const data = doc.data();
-      if (data.to === currentUser.uid && !data.read && data.from === chatWith) {
-        await window.setDoc(window.doc(window.db, "messages", doc.id), { read: true }, { merge: true });
-        updated++;
-      }
-    });
-    console.log("✅ Помечено прочитанными:", updated);
-    
-    if (document.getElementById('admin-chat-section')?.classList.contains('hidden')) {
-      loadUnreadCountForUser();
-    } else {
-      loadUnreadCount();
-    }
-  } catch (e) { console.error("Ошибка пометки прочитанных:", e); }
-}
-
-function loadChatMessages() {
-  const messagesContainer = document.getElementById('chat-messages');
-  if (!messagesContainer) return;
-  
-  let chatWith = ADMIN_UID;
-  const adminSection = document.getElementById('admin-chat-section');
-  if (adminSection && !adminSection.classList.contains('hidden') && currentChatUser) {
-    chatWith = currentChatUser;
-  }
-  
-  console.log("💬 Загрузка сообщений с:", chatWith, "текущий пользователь:", currentUser.uid);
-  
-  if (chatListener) chatListener();
-  
-  const q = window.collection(window.db, "messages");
-  chatListener = window.onSnapshot(q, (snapshot) => {
-    const messages = [];
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      console.log("📨 Сообщение:", { from: data.from, to: data.to, text: data.text });
-      
-      if ((data.from === currentUser.uid && data.to === chatWith) || 
-          (data.from === chatWith && data.to === currentUser.uid)) {
-        messages.push({ id: doc.id, ...data });
-      }
-    });
-    
-    messages.sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
-    console.log("📋 Всего сообщений:", messages.length);
-    renderMessages(messages, chatWith);
-    updateChatBadge();
-  }, (error) => {
-    console.error("❌ Ошибка загрузки сообщений:", error);
-  });
-}
-
-function renderMessages(messages, chatWith) {
-  const container = document.getElementById('chat-messages');
-  if (!container) return;
-  
-  if (messages.length === 0) {
-    container.innerHTML = '<p style="text-align: center; color: #888; padding: 20px;">История пуста. Напишите первое сообщение!</p>';
-    return;
-  }
-  
-  container.innerHTML = messages.map(msg => {
-    const isMine = msg.from === currentUser.uid;
-    const time = msg.timestamp?.seconds ? new Date(msg.timestamp.seconds * 1000).toLocaleTimeString() : '';
-    return `<div class="chat-message ${isMine ? 'mine' : 'other'}">${msg.text}<span class="time">${time}</span></div>`;
-  }).join('');
-  container.scrollTop = container.scrollHeight;
-}
-
-async function sendChatMessage() {
-  const input = document.getElementById('chat-input');
-  const text = input.value.trim();
-  if (!text) return;
-  
-  try {
-    let recipientId = ADMIN_UID;
-    const adminSection = document.getElementById('admin-chat-section');
-    if (adminSection && !adminSection.classList.contains('hidden') && currentChatUser) {
-      recipientId = currentChatUser;
-    }
-    
-    console.log("📤 Отправка сообщения:", {
-      from: currentUser.uid,
-      to: recipientId,
-      text: text
-    });
-    
-    await window.setDoc(window.doc(window.collection(window.db, "messages")), {
-      from: currentUser.uid,
-      to: recipientId,
-      text: text,
-      timestamp: new Date(),
-      read: false
-    });
-    
-    input.value = '';
-    console.log("✅ Сообщение отправлено!");
-  } catch (e) { 
-    console.error("Ошибка отправки:", e); 
-    alert("Ошибка отправки: " + e.message); 
-  }
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  const chatInput = document.getElementById('chat-input');
-  if (chatInput) chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendChatMessage(); });
-});

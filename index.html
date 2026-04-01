@@ -61,6 +61,7 @@
       <button onclick="showScreen('theory-screen')">📚 Теория</button>
       <button onclick="showScreen('practice-screen')">✏️ Практика</button>
       <button onclick="showScreen('test-screen')">📝 Тесты</button>
+      <button onclick="showScreen('forum-screen')" id="forum-btn">📢 Объявления</button>
       <button onclick="showScreen('profile-screen')">👤 Профиль</button>
       <button id="admin-btn" onclick="showScreen('admin-screen')" class="hidden">🛠 Админка</button>
     </nav>
@@ -158,7 +159,12 @@
       </div>
     </div>
   </section>
-
+      <!-- Экран форума/объявлений -->
+  <section id="forum-screen" class="screen hidden">
+    <button onclick="showScreen('main-menu')" class="back-btn">← Назад</button>
+    <h2>📢 Объявления и обсуждения</h2>
+    <div id="forum-content"></div>
+  </section>
   <!-- ==================== ЭКРАН АДМИНКИ ==================== -->
   <section id="admin-screen" class="screen hidden">
     <button onclick="showScreen('main-menu')" class="back-btn">← Назад</button>
@@ -169,6 +175,7 @@
       <button onclick="showAdminTab('tasks')" class="admin-tab-btn">📝 Задания</button>
       <button onclick="showAdminTab('tests')" class="admin-tab-btn">📋 Тесты</button>
       <button onclick="showAdminTab('theory')" class="admin-tab-btn">📚 Теория</button>
+      <button onclick="showAdminTab('forum')" class="admin-tab-btn">📢 Форум</button>
       <button onclick="showAdminTab('add-task')" class="admin-tab-btn">➕ Добавить задание</button>
     </div>
     
@@ -253,7 +260,10 @@
       <button onclick="saveTheory()" class="save-btn">💾 Сохранить теорию</button>
       <p id="theory-message"></p>
     </div>
-    
+    <div id="admin-forum" class="admin-tab-content hidden">
+      <h3>Управление доступом к форуму</h3>
+      <div id="users-list" class="users-list"></div>
+    </div>
     <!-- Вкладка: Добавить задание -->
     <div id="admin-add-task" class="admin-tab-content hidden">
       <h3>Добавить новое задание</h3>
