@@ -44,10 +44,12 @@
     <header>
       <h2>Привет, <span id="user-name"></span>!</h2>
       <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-        <button onclick="toggleTheme()" class="theme-toggle-btn" id="theme-toggle">🌙 Тёмная</button>
-        <button onclick="logout()" class="btn-logout">Выйти</button>
-      </div>
-    </header>
+      <button onclick="toggleTheme()" class="theme-toggle-btn" id="theme-toggle">🌙 Тёмная</button>
+    <!-- ДОБАВЬ ЭТУ КНОПКУ: -->
+      <button id="chat-btn" onclick="toggleChat()" class="chat-btn hidden">💬</button>
+      <button onclick="logout()" class="btn-logout">Выйти</button>
+  </div>
+</header>
     
     <div class="progress-block">
       <h3>Твой прогресс</h3>
@@ -382,7 +384,35 @@
 
     console.log("✅ Firebase подключен!");
   </script>
-
+  <!-- Панель чата -->
+  <div id="chat-panel" class="chat-panel hidden">
+  <div class="chat-header">
+    <h4>💬 Сообщения</h4>
+    <button onclick="toggleChat()" class="chat-close">✕</button>
+  </div>
+  
+  <div id="chat-messages" class="chat-messages"></div>
+  
+  <div class="chat-input">
+    <input type="text" id="chat-input" placeholder="Написать...">
+    <button onclick="sendChatMessage()">➤</button>
+  </div>
+  
+  <!-- Для админа: выбор пользователя -->
+  <div id="admin-chat-section" class="hidden">
+    <div style="padding: 10px; border-top: 1px solid #333;">
+      <select id="chat-user-select" class="chat-user-select">
+        <option value="">Выберите пользователя...</option>
+      </select>
+    </div>
+  </div>
+  
+  <!-- Для админа: управление доступом -->
+  <div id="admin-chat-manage" class="chat-manage hidden">
+    <h5>🔐 Управление доступом</h5>
+    <div id="users-access-list"></div>
+  </div>
+</div>
   <script src="script.js"></script>
 </body>
 </html>

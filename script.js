@@ -49,6 +49,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     
     // 🎮 Показываем игру на память при входе!
     showMemoryGame();
+    checkChatAccess();
   } else {
     currentUser = null;
     currentUsername = null;
@@ -1012,3 +1013,211 @@ function toggleTheme() {
 
 // Вызываем загрузку темы при старте
 // Добавь это в window.addEventListener('DOMContentLoaded', ...)
+
+// ==================== ЧАТ ====================
+
+let chatListener = null;
+let currentChatUser = null;
+
+// Проверка доступа к чату
+async function checkChatAccess() {
+  if (!currentUser) return;
+  
+  const chatBtn = document.getElementById('chat-btn');
+  if (!chatBtn) return;
+  
+  try {
+    const userDoc = await window.getDoc(window.doc(window.db, "users", currentUser.uid));
+    if (userDoc.exists()) {
+      const data = userDoc.data();
+      
+      // Показываем кнопку если: админ ИЛИ есть доступ
+      if (data.isAdmin === true || data.hasChatAccess === true) {
+        chatBtn.classList.remove('hidden');
+        
+        // Если админ — показываем дополнительные секции
+        if (data.isAdmin === true) {
+          document.getElementById('admin-chat-section')?.classList.remove('hidden');
+          document.getElementById('admin-chat-manage')?.classList.remove('hidden');
+          loadUsersForChat();
+        }
+      } else {
+        chatBtn.classList.add('hidden');
+      }
+    }
+  } catch (e) {
+    console.error("Ошибка проверки доступа к чату:", e);
+  }
+}
+
+// Показать/скрыть чат
+function toggleChat() {
+  const panel = document.getElementById('chat-panel');
+  if (!panel) return;
+  
+  if (panel.classList.contains('hidden')) {
+    panel.classList.remove('hidden');
+    loadChatMessages();
+  } else {
+    panel.classList.add('hidden');
+    if (chatListener) {
+      chatListener();
+      chatListener = null;
+    }
+  }
+}
+
+// Загрузка пользователей для админа
+async function loadUsersForChat() {
+  const select = document.getElementById('chat-user-select');
+  const list = document.getElementById('users-access-list');
+  if (!select) return;
+  
+  try {
+    const snapshot = await window.getDocs(window.collection(window.db, "users"));
+    select.innerHTML = '<option value="">Выберите пользователя...</option>';
+    if (list) list.innerHTML = '';
+    
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      if (doc.id === currentUser.uid) return; // не показываем себя
+      
+      // Добавляем в список для чата
+      const option = document.createElement('option');
+      option.value = doc.id;
+      option.textContent = `${data.username || data.email} ${data.hasChatAccess ? '✅' : ''}`;
+      select.appendChild(option);
+      
+      // Добавляем в список управления доступом (для админа)
+      if (list) {
+        const item = document.createElement('div');
+        item.className = 'user-access-item';
+        item.style.cssText = 'display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #333;';
+        item.innerHTML = `
+          <span style="color: #e0e0e0;">${data.username || data.email}</span>
+          <button class="${data.hasChatAccess ? 'revoke-btn' : 'grant-btn'}" 
+                  onclick="toggleChatAccess('${doc.id}', ${data.hasChatAccess})"
+                  style="padding: 5px 10px; border: none; border-radius: 5px; cursor: pointer; font-size: 12px; background: ${data.hasChatAccess ? '#ff4444' : '#00ff88'}; color: ${data.hasChatAccess ? 'white' : '#0a0a0a'};">
+            ${data.hasChatAccess ? '❌ Забрать' : '✅ Дать'}
+          </button>
+        `;
+        list.appendChild(item);
+      }
+    });
+    
+    // Обработчик выбора пользователя
+    select.onchange = (e) => {
+      currentChatUser = e.target.value;
+      loadChatMessages();
+    };
+    
+  } catch (e) {
+    console.error("Ошибка загрузки пользователей:", e);
+  }
+}
+
+// Выдать/забрать доступ к чату
+async function toggleChatAccess(userId, currentlyHas) {
+  try {
+    await window.setDoc(window.doc(window.db, "users", userId), {
+      hasChatAccess: !currentlyHas
+    }, { merge: true });
+    
+    loadUsersForChat(); // обновить список
+  } catch (e) {
+    alert("Ошибка: " + e.message);
+  }
+}
+
+// Загрузка сообщений
+function loadChatMessages() {
+  const messagesContainer = document.getElementById('chat-messages');
+  if (!messagesContainer) return;
+  
+  // Определяем с кем чатимся (для админа — выбранный пользователь, для обычного — админ)
+  const chatWith = currentChatUser || 'admin';
+  
+  // Отписываемся от предыдущего слушателя
+  if (chatListener) {
+    chatListener();
+  }
+  
+  // Подписываемся на сообщения
+  const q = window.collection(window.db, "messages");
+  chatListener = window.onSnapshot(q, (snapshot) => {
+    const messages = [];
+    
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      // Показываем только сообщения между текущим юзером и собеседником
+      if ((data.from === currentUser.uid && data.to === chatWith) ||
+          (data.from === chatWith && data.to === currentUser.uid)) {
+        messages.push({ id: doc.id, ...data });
+      }
+    });
+    
+    // Сортируем по времени
+    messages.sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
+    
+    // Отображаем
+    renderMessages(messages);
+  });
+}
+
+// Отображение сообщений
+function renderMessages(messages) {
+  const container = document.getElementById('chat-messages');
+  if (!container) return;
+  
+  const chatWith = currentChatUser || 'admin';
+  
+  container.innerHTML = messages.map(msg => {
+    const isMine = msg.from === currentUser.uid;
+    const time = msg.timestamp?.seconds ? new Date(msg.timestamp.seconds * 1000).toLocaleTimeString() : '';
+    
+    return `
+      <div class="chat-message ${isMine ? 'mine' : 'other'}">
+        ${msg.text}
+        <span class="time">${time}</span>
+      </div>
+    `;
+  }).join('');
+  
+  // Прокрутка вниз
+  container.scrollTop = container.scrollHeight;
+}
+
+// Отправка сообщения
+async function sendChatMessage() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  
+  try {
+    const chatWith = currentChatUser || 'admin';
+    
+    await window.setDoc(window.doc(window.collection(window.db, "messages")), {
+      from: currentUser.uid,
+      to: chatWith,
+      text: text,
+      timestamp: new Date(),
+      read: false
+    });
+    
+    input.value = '';
+  } catch (e) {
+    alert("Ошибка отправки: " + e.message);
+  }
+}
+
+// Отправка по Enter
+document.addEventListener('DOMContentLoaded', () => {
+  const chatInput = document.getElementById('chat-input');
+  if (chatInput) {
+    chatInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        sendChatMessage();
+      }
+    });
+  }
+});
