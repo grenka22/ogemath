@@ -1,17 +1,18 @@
 // ==================== КОНСТАНТЫ ====================
-const ADMIN_UID = "F0RuVaEotpWX0D7dYgW3Evsk7oo1"; // ← ВСТАВЬ СВОЙ UID!
+const ADMIN_UID = "F0RuVaEotpWX0D7dYgW3Evsk7oo1";
 
 let currentUser = null;
 let currentUsername = null;
 let currentTaskId = null;
 let hintTimers = {};
 let currentTopicFilter = "all";
+let forumPosts = [];
+let allUsers = [];
 
 // ==================== ДАННЫЕ ====================
 let theoryData = [];
 let practiceData = [];
 let testData = [];
-let forumPosts = [];
 
 const topicsList = [
   { id: "all", name: "🎲 Все темы" },
@@ -34,7 +35,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   await loadTheoryFromFirebase();
   await loadPracticeFromFirebase();
   await loadTestsFromFirebase();
-  await loadForumPosts();
+  await loadAllUsersData();
 
   window.onAuthStateChanged(window.auth, async (user) => {
     if (user) {
@@ -49,7 +50,6 @@ window.addEventListener('DOMContentLoaded', async () => {
       await loadUserData();
       
       showMemoryGame();
-      checkForumAccess();
     } else {
       currentUser = null;
       currentUsername = null;
@@ -64,7 +64,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   initTestImagePreview();
 });
 
-// ==================== ЗАГРУЗКА ДАННЫХ ИЗ FIREBASE ====================
+// ==================== ЗАГРУЗКА ДАННЫХ ====================
 async function loadTheoryFromFirebase() {
   try {
     const snapshot = await window.getDocs(window.collection(window.db, "theory"));
@@ -73,7 +73,7 @@ async function loadTheoryFromFirebase() {
       snapshot.forEach(doc => { theoryData.push({ id: doc.id, ...doc.data() }); });
     }
     console.log("📚 Теория загружена:", theoryData.length);
-  } catch (e) { console.error("❌ Ошибка загрузки теории:", e); theoryData = []; }
+  } catch (e) { console.error("❌ Ошибка загрузки теории:", e); }
 }
 
 async function loadPracticeFromFirebase() {
@@ -84,7 +84,7 @@ async function loadPracticeFromFirebase() {
       snapshot.forEach(doc => { practiceData.push({ id: parseInt(doc.id), ...doc.data() }); });
     }
     console.log("✏️ Практика загружена:", practiceData.length);
-  } catch (e) { console.error("❌ Ошибка загрузки практики:", e); practiceData = []; }
+  } catch (e) { console.error("❌ Ошибка загрузки практики:", e); }
 }
 
 async function loadTestsFromFirebase() {
@@ -95,7 +95,18 @@ async function loadTestsFromFirebase() {
       snapshot.forEach(doc => { testData.push({ id: doc.id, ...doc.data() }); });
     }
     console.log("📋 Тесты загружены:", testData.length);
-  } catch (e) { console.error("❌ Ошибка загрузки тестов:", e); testData = []; }
+  } catch (e) { console.error("❌ Ошибка загрузки тестов:", e); }
+}
+
+async function loadAllUsersData() {
+  try {
+    const snapshot = await window.getDocs(window.collection(window.db, "users"));
+    allUsers = [];
+    snapshot.forEach(doc => {
+      allUsers.push({ id: doc.id, ...doc.data() });
+    });
+    console.log("👥 Пользователи загружены:", allUsers.length);
+  } catch (e) { console.error("❌ Ошибка загрузки пользователей:", e); }
 }
 
 async function loadForumPosts() {
@@ -105,31 +116,12 @@ async function loadForumPosts() {
     if (!snapshot.empty) {
       snapshot.forEach(doc => { 
         const post = { id: doc.id, ...doc.data() };
-        // Загружаем комментарии для каждого поста
-        loadPostComments(post.id);
         forumPosts.push(post);
       });
     }
     forumPosts.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
     console.log("📢 Объявления загружены:", forumPosts.length);
-  } catch (e) { console.error("❌ Ошибка загрузки объявлений:", e); forumPosts = []; }
-}
-
-async function loadPostComments(postId) {
-  try {
-    const snapshot = await window.getDocs(window.collection(window.db, "forum_comments"));
-    const post = forumPosts.find(p => p.id === postId);
-    if (post) {
-      post.comments = [];
-      snapshot.forEach(doc => {
-        const comment = { id: doc.id, ...doc.data() };
-        if (comment.postId === postId) {
-          post.comments.push(comment);
-        }
-      });
-      post.comments.sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
-    }
-  } catch (e) { console.error("❌ Ошибка загрузки комментариев:", e); }
+  } catch (e) { console.error("❌ Ошибка загрузки объявлений:", e); }
 }
 
 // ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
@@ -181,7 +173,7 @@ function showScreen(screenId) {
   if (screenId === 'practice-screen') showTopicSelection();
   if (screenId === 'profile-screen') loadProfileStats();
   if (screenId === 'test-screen') { loadTestsFromFirebase(); showTestTopicSelection(); }
-  if (screenId === 'forum-screen') { loadForumPosts(); showForum(); }
+  if (screenId === 'forum-screen') showForum();
 }
 
 // ==================== АВТОРИЗАЦИЯ ====================
@@ -199,7 +191,7 @@ async function register() {
     const cred = await window.createUserWithEmailAndPassword(window.auth, fakeEmail, password);
     await window.setDoc(window.doc(window.db, "users", cred.user.uid), {
       username, email: fakeEmail, createdAt: new Date(),
-      progress: {}, mistakes: [], isAdmin: false, hasForumAccess: false
+      progress: {}, mistakes: [], isAdmin: false, canSeeForum: false
     });
     alert('✅ Регистрация успешна! Теперь войдите.');
     showScreen('login-screen');
@@ -228,6 +220,17 @@ async function loadUserData() {
     const data = doc.data();
     const adminBtn = document.getElementById('admin-btn');
     if (adminBtn) { if (data.isAdmin === true) adminBtn.classList.remove('hidden'); else adminBtn.classList.add('hidden'); }
+    
+    // Показываем кнопку форума только если админ или может видеть форум
+    const forumBtn = document.getElementById('forum-btn');
+    if (forumBtn) {
+      if (data.isAdmin === true || data.canSeeForum === true) {
+        forumBtn.classList.remove('hidden');
+      } else {
+        forumBtn.classList.add('hidden');
+      }
+    }
+    
     updateProgress(data.progress || {});
   }
 }
@@ -350,16 +353,7 @@ async function loadProfileStats() {
 }
 
 // ==================== ФОРУМ/ОБЪЯВЛЕНИЯ ====================
-let currentPostId = null;
-
-function checkForumAccess() {
-  // Кнопка форума видна всем (или можно скрыть для тех у кого нет доступа)
-  const forumBtn = document.getElementById('forum-btn');
-  if (forumBtn) forumBtn.classList.remove('hidden');
-}
-
 function showForum() {
-  loadForumPosts();
   const container = document.getElementById('forum-content');
   if (!container) return;
   
@@ -367,12 +361,23 @@ function showForum() {
   
   container.innerHTML = `
     <div class="forum-header">
-      <h3>📢 Объявления и обсуждения</h3>
-      ${isAdmin ? '<button onclick="showNewPostForm()" class="save-btn" style="width: auto; padding: 10px 20px; margin-top: 0;">➕ Новый пост</button>' : ''}
+      <h3>📢 Объявления</h3>
+      ${isAdmin ? '<button onclick="showNewPostForm()" class="save-btn" style="width: auto; padding: 10px 20px; margin-top: 0;">➕ Новое объявление</button>' : ''}
     </div>
     <div id="new-post-form" class="hidden" style="margin: 20px 0; padding: 20px; background: rgba(0, 255, 136, 0.1); border-radius: 10px;">
       <input type="text" id="new-post-title" placeholder="Заголовок" style="width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 5px; border: 2px solid #00ff88; background: #1a1a1a; color: #e0e0e0;">
       <textarea id="new-post-content" placeholder="Текст объявления..." style="width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 5px; border: 2px solid #00ff88; background: #1a1a1a; color: #e0e0e0; min-height: 100px;"></textarea>
+      <div style="margin: 15px 0;">
+        <label style="color: #00ff88; display: block; margin-bottom: 10px;">👥 Кто может видеть:</label>
+        <div id="user-access-list" style="max-height: 200px; overflow-y: auto; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 5px;">
+          ${allUsers.map(user => `
+            <label style="display: flex; align-items: center; margin: 8px 0; color: #e0e0e0; cursor: pointer;">
+              <input type="checkbox" value="${user.id}" style="margin-right: 10px; width: 18px; height: 18px;">
+              ${user.username || user.email} ${user.email?.includes('oge.local') ? '' : '(админ)'}
+            </label>
+          `).join('')}
+        </div>
+      </div>
       <button onclick="createNewPost()" class="save-btn" style="width: auto;">💾 Опубликовать</button>
       <button onclick="hideNewPostForm()" class="back-btn" style="width: auto; margin-left: 10px;">✕ Отмена</button>
     </div>
@@ -396,8 +401,14 @@ async function createNewPost() {
   const title = document.getElementById('new-post-title')?.value.trim();
   const content = document.getElementById('new-post-content')?.value.trim();
   
-  if (!title || !content) {
-    alert('❌ Заполните заголовок и текст!');
+  if (!title || !content) { alert('❌ Заполните заголовок и текст!'); return; }
+  
+  // Получаем выбранных пользователей
+  const checkboxes = document.querySelectorAll('#user-access-list input[type="checkbox"]:checked');
+  const visibleFor = Array.from(checkboxes).map(cb => cb.value);
+  
+  if (visibleFor.length === 0) {
+    alert('❌ Выберите хотя бы одного пользователя!');
     return;
   }
   
@@ -407,16 +418,16 @@ async function createNewPost() {
       content,
       authorId: currentUser.uid,
       authorName: currentUsername || 'Админ',
-      createdAt: new Date(),
-      commentsCount: 0
+      visibleFor: visibleFor,
+      createdAt: new Date()
     };
     
     await window.setDoc(window.doc(window.collection(window.db, "forum_posts")), newPost);
     
     hideNewPostForm();
-    loadForumPosts();
+    await loadForumPosts();
     renderPostsList();
-    alert('✅ Пост опубликован!');
+    alert('✅ Объявление опубликовано!');
   } catch (e) {
     alert('❌ Ошибка: ' + e.message);
   }
@@ -426,14 +437,19 @@ function renderPostsList() {
   const container = document.getElementById('posts-list');
   if (!container) return;
   
-  if (forumPosts.length === 0) {
-    container.innerHTML = '<p style="text-align: center; color: #888; padding: 40px;">Пока нет объявлений</p>';
+  // Фильтруем посты - показываем только те, что доступны текущему пользователю
+  const userPosts = forumPosts.filter(post => {
+    if (currentUser.uid === ADMIN_UID) return true;
+    return post.visibleFor && post.visibleFor.includes(currentUser.uid);
+  });
+  
+  if (userPosts.length === 0) {
+    container.innerHTML = '<p style="text-align: center; color: #888; padding: 40px;">Нет доступных объявлений</p>';
     return;
   }
   
-  container.innerHTML = forumPosts.map(post => {
+  container.innerHTML = userPosts.map(post => {
     const time = post.createdAt?.seconds ? new Date(post.createdAt.seconds * 1000).toLocaleDateString('ru-RU') : '';
-    const commentsCount = post.comments?.length || 0;
     
     return `
       <div class="forum-post" onclick="openPost('${post.id}')">
@@ -444,7 +460,6 @@ function renderPostsList() {
         <p class="forum-post-preview">${post.content.substring(0, 150)}${post.content.length > 150 ? '...' : ''}</p>
         <div class="forum-post-footer">
           <span class="forum-post-date">${time}</span>
-          <span class="forum-post-comments">💬 ${commentsCount} ответов</span>
         </div>
       </div>
     `;
@@ -455,13 +470,11 @@ async function openPost(postId) {
   const post = forumPosts.find(p => p.id === postId);
   if (!post) return;
   
-  currentPostId = postId;
   const container = document.getElementById('posts-list');
   if (!container) return;
   
   const time = post.createdAt?.seconds ? new Date(post.createdAt.seconds * 1000).toLocaleString('ru-RU') : '';
   const isAdmin = currentUser?.uid === ADMIN_UID;
-  const hasAccess = await checkUserForumAccess();
   
   container.innerHTML = `
     <button onclick="showForum()" class="back-btn">← Назад к списку</button>
@@ -469,7 +482,12 @@ async function openPost(postId) {
     <div class="forum-post-full">
       <div class="forum-post-header">
         <h2>${post.title}</h2>
-        ${isAdmin ? '<button onclick="deletePost(\'' + post.id + '\')" class="delete-btn" style="margin-left: auto;">🗑 Удалить</button>' : ''}
+        ${isAdmin ? `
+          <div>
+            <button onclick="editPost('${post.id}')" class="edit-btn" style="margin-right: 10px;">✏️ Редактировать</button>
+            <button onclick="deletePost('${post.id}')" class="delete-btn">🗑 Удалить</button>
+          </div>
+        ` : ''}
       </div>
       <div class="forum-post-meta">
         <span class="forum-post-author">👤 ${post.authorName}</span>
@@ -477,87 +495,42 @@ async function openPost(postId) {
       </div>
       <div class="forum-post-content">${post.content.replace(/\n/g, '<br>')}</div>
     </div>
-    
-    <div class="forum-comments">
-      <h3>💬 Комментарии (${post.comments?.length || 0})</h3>
-      
-      ${hasAccess ? `
-        <div class="new-comment-form">
-          <textarea id="new-comment-text" placeholder="Написать ответ..." style="width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 5px; border: 2px solid #00ff88; background: #1a1a1a; color: #e0e0e0; min-height: 80px;"></textarea>
-          <button onclick="addComment()" class="save-btn" style="width: auto;">📤 Отправить</button>
-        </div>
-      ` : '<p style="color: #888;">🔒 Только избранные пользователи могут комментировать</p>'}
-      
-      <div id="comments-list" class="comments-list">
-        ${(post.comments || []).map(comment => {
-          const commentTime = comment.createdAt?.seconds ? new Date(comment.createdAt.seconds * 1000).toLocaleString('ru-RU') : '';
-          return `
-            <div class="comment">
-              <div class="comment-header">
-                <span class="comment-author">👤 ${comment.authorName}</span>
-                <span class="comment-date">${commentTime}</span>
-              </div>
-              <div class="comment-content">${comment.content.replace(/\n/g, '<br>')}</div>
-            </div>
-          `;
-        }).join('')}
-      </div>
-    </div>
   `;
 }
 
-async function checkUserForumAccess() {
-  if (!currentUser) return false;
-  if (currentUser.uid === ADMIN_UID) return true;
+async function editPost(postId) {
+  const post = forumPosts.find(p => p.id === postId);
+  if (!post) return;
+  
+  const newTitle = prompt('Новый заголовок:', post.title);
+  if (!newTitle) return;
+  
+  const newContent = prompt('Новый текст:', post.content);
+  if (!newContent) return;
   
   try {
-    const doc = await window.getDoc(window.doc(window.db, "users", currentUser.uid));
-    if (doc.exists()) {
-      return doc.data().hasForumAccess === true;
-    }
-  } catch (e) { console.error("Ошибка проверки доступа:", e); }
-  return false;
-}
-
-async function addComment() {
-  const text = document.getElementById('new-comment-text')?.value.trim();
-  if (!text) { alert('❌ Введите текст комментария!'); return; }
-  
-  try {
-    const newComment = {
-      postId: currentPostId,
-      content: text,
-      authorId: currentUser.uid,
-      authorName: currentUsername || 'Пользователь',
-      createdAt: new Date()
-    };
+    await window.setDoc(window.doc(window.db, "forum_posts", postId), {
+      ...post,
+      title: newTitle,
+      content: newContent
+    }, { merge: true });
     
-    await window.setDoc(window.doc(window.collection(window.db, "forum_comments")), newComment);
-    
-    document.getElementById('new-comment-text').value = '';
-    loadForumPosts();
-    openPost(currentPostId);
+    await loadForumPosts();
+    openPost(postId);
+    alert('✅ Обновлено!');
   } catch (e) {
     alert('❌ Ошибка: ' + e.message);
   }
 }
 
 async function deletePost(postId) {
-  if (!confirm('Удалить этот пост?')) return;
+  if (!confirm('Удалить это объявление?')) return;
   
   try {
     await window.deleteDoc(window.doc(window.db, "forum_posts", postId));
-    
-    // Удаляем комментарии
-    const snapshot = await window.getDocs(window.collection(window.db, "forum_comments"));
-    snapshot.forEach(async doc => {
-      if (doc.data().postId === postId) {
-        await window.deleteDoc(window.doc(window.db, "forum_comments", doc.id));
-      }
-    });
-    
-    loadForumPosts();
+    await loadForumPosts();
     showForum();
+    alert('✅ Удалено!');
   } catch (e) {
     alert('❌ Ошибка: ' + e.message);
   }
@@ -569,7 +542,12 @@ function showAdminTab(tabName) {
   document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('admin-' + tabName)?.classList.remove('hidden');
   if (event?.target) event.target.classList.add('active');
-  if (tabName === 'users') loadAllUsers(); else if (tabName === 'tasks') loadAllTasks(); else if (tabName === 'tests') loadTestsAdmin(); else if (tabName === 'theory') loadTheoryAdmin(); else if (tabName === 'forum') loadForumAdmin();
+  
+  if (tabName === 'users') loadAllUsers();
+  else if (tabName === 'tasks') loadAllTasks();
+  else if (tabName === 'tests') loadTestsAdmin();
+  else if (tabName === 'theory') loadTheoryAdmin();
+  else if (tabName === 'forum') loadForumAdmin();
 }
 
 async function loadAllUsers() {
@@ -578,15 +556,15 @@ async function loadAllUsers() {
     const snap = await window.getDocs(window.collection(window.db, "users"));
     if (snap.empty) { list.innerHTML = '<p>Пользователей нет</p>'; return; }
     list.innerHTML = Array.from(snap.docs).map(d => {
-      const data = d.data(); const prog = data.progress || {}; const errs = data.mistakes || []; const hasForum = data.hasForumAccess === true;
-      return `<div class="user-card"><h4>${data.username||'Без имени'} (${data.email||'нет'})</h4><p>Зарегистрирован: ${data.createdAt ? new Date(data.createdAt.seconds*1000).toLocaleDateString() : '?'}</p><p>Выполнено: ${Object.keys(prog).length} | Ошибок: ${errs.length}</p><p>Статус: ${data.isAdmin ? '👑 Админ' : '👤 Ученик'}</p><p>Форум: ${hasForum ? '✅ Доступен' : '❌ Запрещён'}</p><button onclick="toggleForumAccess('${d.id}', ${hasForum})" class="${hasForum ? 'delete-btn' : 'edit-btn'}" style="margin-top: 10px;">${hasForum ? '❌ Забрать доступ' : '✅ Дать доступ'}</button></div>`;
+      const data = d.data(); const prog = data.progress || {}; const errs = data.mistakes || []; const canSeeForum = data.canSeeForum === true;
+      return `<div class="user-card"><h4>${data.username||'Без имени'} (${data.email||'нет'})</h4><p>Зарегистрирован: ${data.createdAt ? new Date(data.createdAt.seconds*1000).toLocaleDateString() : '?'}</p><p>Выполнено: ${Object.keys(prog).length} | Ошибок: ${errs.length}</p><p>Статус: ${data.isAdmin ? '👑 Админ' : '👤 Ученик'}</p><p>Форум: ${canSeeForum ? '✅ Доступен' : '❌ Запрещён'}</p><button onclick="toggleForumAccess('${d.id}', ${canSeeForum})" class="${canSeeForum ? 'delete-btn' : 'edit-btn'}" style="margin-top: 10px;">${canSeeForum ? '❌ Забрать доступ' : '✅ Дать доступ'}</button></div>`;
     }).join('');
   } catch (e) { list.innerHTML = `<p class="error">Ошибка: ${e.message}</p>`; }
 }
 
 async function toggleForumAccess(userId, currentlyHas) {
   try {
-    await window.setDoc(window.doc(window.db, "users", userId), { hasForumAccess: !currentlyHas }, { merge: true });
+    await window.setDoc(window.doc(window.db, "users", userId), { canSeeForum: !currentlyHas }, { merge: true });
     loadAllUsers();
     alert(`✅ Доступ ${!currentlyHas ? 'выдан' : 'забран'}!`);
   } catch (e) { console.error("Ошибка:", e); alert("Ошибка: " + e.message); }
@@ -652,6 +630,18 @@ function editTheory(index) { const t = theoryData[index]; if (!t) return; docume
 async function updateTheory(index) { const t = theoryData[index]; if (!t) return; const updated = { ...t, number: document.getElementById('theory-number').value, title: document.getElementById('theory-title').value, content: document.getElementById('theory-content').value }; try { await window.setDoc(window.doc(window.db, "theory", t.id.toString()), updated); theoryData[index] = updated; const msg = document.getElementById('theory-message'); msg.textContent = '✅ Обновлено!'; msg.className = 'success-msg'; const btn = document.querySelector('#admin-theory .save-btn'); if (btn) { btn.textContent = '💾 Сохранить'; btn.onclick = saveTheory; } loadTheoryAdmin(); } catch (e) { console.error("Ошибка:", e); document.getElementById('theory-message').textContent = '❌ Ошибка: ' + e.message; } }
 
 async function deleteTheory(index) { if (!confirm('Удалить теорию?')) return; const t = theoryData[index]; if (!t || !t.id) { alert('Ошибка: теория не найдена!'); return; } try { console.log("🗑 Удаляю теорию ID:", t.id); const theoryRef = window.doc(window.db, "theory", t.id.toString()); await window.deleteDoc(theoryRef); theoryData.splice(index, 1); loadTheoryAdmin(); console.log("✅ Теория удалена"); } catch (e) { console.error("❌ Ошибка удаления:", e); alert('Ошибка: ' + e.message); } }
+
+// ==================== АДМИНКА: ФОРУМ ====================
+function loadForumAdmin() {
+  const container = document.getElementById('admin-forum');
+  if (!container) return;
+  
+  container.innerHTML = `
+    <h3>📢 Управление объявлениями</h3>
+    <p style="color: #888; margin-bottom: 20px;">Здесь вы можете создавать объявления и выбирать кто их увидит</p>
+    <button onclick="showForum()" class="save-btn">📝 Перейти к форуму</button>
+  `;
+}
 
 // ==================== ТЕСТЫ ====================
 let currentTestTopic = "all"; let currentTestIndex = 0; let testAnswers = {}; let testScore = 0;
