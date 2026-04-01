@@ -582,24 +582,30 @@ async function loadAllUsers() {
 // 🔥 ИСПРАВЛЕННАЯ ФУНКЦИЯ ВЫДАЧИ ДОСТУПА
 async function toggleForumAccess(userId, currentlyHas) {
   try {
-    console.log("🔄 Выдача доступа:", userId, "сейчас:", currentlyHas);
-    
     const userRef = window.doc(window.db, "users", userId);
     await window.setDoc(userRef, { 
       canSeeForum: !currentlyHas 
     }, { merge: true });
     
-    console.log("✅ Доступ обновлён!");
-    
-    // Перезагружаем список
-    await loadAllUsers();
+    // 🔥 Обновляем локальный список пользователей
     await loadAllUsersData();
+    
+    // 🔥 Перезагружаем список в админке
+    await loadAllUsers();
     
     alert(`✅ Доступ ${!currentlyHas ? 'выдан' : 'забран'}!`);
   } catch (e) { 
-    console.error("❌ Ошибка:", e);
     alert("Ошибка: " + e.message); 
   }
+// 🔥 Принудительно показываем/скрываем кнопку форума
+const forumBtn = document.getElementById('forum-btn');
+if (forumBtn && userId === currentUser?.uid) {
+  if (!currentlyHas) {
+    forumBtn.classList.remove('hidden');
+  } else {
+    forumBtn.classList.add('hidden');
+  }
+}
 }
 
 function loadAllTasks() {
