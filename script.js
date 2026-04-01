@@ -317,16 +317,23 @@ async function loadProfileStats() {
 // ==================== ОБЪЯВЛЕНИЯ (видят все) ====================
 async function loadForumPosts() {
   try {
+    console.log("📢 Загрузка объявлений...");
     const snapshot = await window.getDocs(window.collection(window.db, "forum_posts"));
     forumPosts = [];
     if (!snapshot.empty) {
       snapshot.forEach(doc => { 
-        forumPosts.push({ id: doc.id, ...doc.data() });
+        const post = { id: doc.id, ...doc.data() };
+        console.log("✅ Пост:", post.title);
+        forumPosts.push(post);
       });
+    } else {
+      console.log("⚠️ Постов нет в базе");
     }
     forumPosts.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-    console.log("📢 Объявления загружены:", forumPosts.length);
-  } catch (e) { console.error("❌ Ошибка загрузки объявлений:", e); }
+    console.log("📢 Всего объявлений:", forumPosts.length);
+  } catch (e) { 
+    console.error("❌ Ошибка загрузки объявлений:", e); 
+  }
 }
 
 function showForum() {
