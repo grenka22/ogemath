@@ -1,3 +1,7 @@
+// ==================== КОНСТАНТЫ ====================
+// ⚠️ ВСТАВЬ СЮДА СВОЙ UID АДМИНА ИЗ FIREBASE AUTHENTICATION!
+const ADMIN_UID = "F0RuVaEotpWX0D7dYgW3Evsk7oo1";
+
 let currentUser = null;
 let currentUsername = null;
 let currentTaskId = null;
@@ -26,10 +30,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  // 🎨 Загружаем сохранённую тему
   loadTheme();
 
-  // Загружаем данные из Firebase
   await loadTheoryFromFirebase();
   await loadPracticeFromFirebase();
   await loadTestsFromFirebase();
@@ -37,6 +39,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   window.onAuthStateChanged(window.auth, async (user) => {
     if (user) {
       currentUser = user;
+      console.log("✅ Пользователь вошёл:", user.uid);
+      
       document.getElementById('login-screen')?.classList.add('hidden');
       document.getElementById('register-screen')?.classList.add('hidden');
       document.getElementById('main-menu')?.classList.remove('hidden');
@@ -44,10 +48,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       document.getElementById('user-name').textContent = currentUsername || user.email.split('@')[0];
       await loadUserData();
       
-      // 🎮 Показываем игру на память при входе!
       showMemoryGame();
-      
-      // 💬 Проверка доступа к чату
       checkChatAccess();
     } else {
       currentUser = null;
@@ -458,68 +459,75 @@ function toggleTheme() { const body = document.body; const isLight = body.classL
 // ==================== ЧАТ С УВЕДОМЛЕНИЯМИ ====================
 let chatListener = null;
 let currentChatUser = null;
-let unreadMessages = {}; // { userId: count }
+let unreadMessages = {};
 
-// Проверка доступа к чату
 async function checkChatAccess() {
   if (!currentUser) return;
   const chatBtn = document.getElementById('chat-btn');
   if (!chatBtn) return;
+  
   try {
     const userDoc = await window.getDoc(window.doc(window.db, "users", currentUser.uid));
     if (userDoc.exists()) {
       const data = userDoc.data();
       const isAdmin = data.isAdmin === true;
       const hasChat = data.hasChatAccess === true;
+      
+      console.log("🔍 Проверка чата:", { uid: currentUser.uid, isAdmin, hasChat });
+      
       if (isAdmin || hasChat) {
         chatBtn.classList.remove('hidden');
         if (isAdmin) {
           document.getElementById('admin-chat-section')?.classList.remove('hidden');
           document.getElementById('admin-chat-manage')?.classList.remove('hidden');
           loadUsersForChat();
-          loadUnreadCount(); // Загружаем счётчик непрочитанных для админа
+          loadUnreadCount();
         } else {
           document.getElementById('admin-chat-section')?.classList.add('hidden');
           document.getElementById('admin-chat-manage')?.classList.add('hidden');
-          loadUnreadCountForUser(); // Загружаем счётчик для обычного пользователя
+          loadUnreadCountForUser();
         }
-      } else { chatBtn.classList.add('hidden'); }
+      } else {
+        chatBtn.classList.add('hidden');
+      }
     }
   } catch (e) { console.error("Ошибка проверки доступа к чату:", e); }
 }
 
-// Показать/скрыть чат
 function toggleChat() {
   const panel = document.getElementById('chat-panel');
   if (!panel) return;
   if (panel.classList.contains('hidden')) {
     panel.classList.remove('hidden');
     loadChatMessages();
-    clearUnreadBadge(); // Сбрасываем бейдж при открытии
+    clearUnreadBadge();
   } else {
     panel.classList.add('hidden');
     if (chatListener) { chatListener(); chatListener = null; }
   }
 }
 
-// Загрузка пользователей для админа
 async function loadUsersForChat() {
   const select = document.getElementById('chat-user-select');
   const list = document.getElementById('users-access-list');
   if (!select) return;
+  
   try {
     const snapshot = await window.getDocs(window.collection(window.db, "users"));
     select.innerHTML = '<option value="">Выберите пользователя...</option>';
     if (list) list.innerHTML = '';
+    
     snapshot.forEach(doc => {
       const data = doc.data();
       if (doc.id === currentUser.uid) return;
       const userName = data.username || data.email || 'Без имени';
       const hasChat = data.hasChatAccess === true;
+      
       const option = document.createElement('option');
       option.value = doc.id;
       option.textContent = `${userName} ${hasChat ? '✅' : ''}`;
       select.appendChild(option);
+      
       if (list) {
         const item = document.createElement('div');
         item.className = 'user-access-item';
@@ -528,11 +536,15 @@ async function loadUsersForChat() {
         list.appendChild(item);
       }
     });
-    select.onchange = (e) => { currentChatUser = e.target.value; loadChatMessages(); };
+    
+    select.onchange = (e) => { 
+      currentChatUser = e.target.value; 
+      console.log("👤 Выбран пользователь:", currentChatUser);
+      loadChatMessages(); 
+    };
   } catch (e) { console.error("Ошибка загрузки пользователей:", e); }
 }
 
-// Выдать/забрать доступ к чату
 async function toggleChatAccess(userId, currentlyHas) {
   try {
     await window.setDoc(window.doc(window.db, "users", userId), { hasChatAccess: !currentlyHas }, { merge: true });
@@ -541,7 +553,6 @@ async function toggleChatAccess(userId, currentlyHas) {
   } catch (e) { console.error("Ошибка:", e); alert("Ошибка: " + e.message); }
 }
 
-// Загрузка непрочитанных для админа
 async function loadUnreadCount() {
   try {
     const snapshot = await window.getDocs(window.collection(window.db, "messages"));
@@ -553,42 +564,42 @@ async function loadUnreadCount() {
       }
     });
     unreadMessages = counts;
+    console.log("📊 Непрочитанные для админа:", counts);
     updateChatBadge();
   } catch (e) { console.error("Ошибка загрузки непрочитанных:", e); }
 }
 
-// Загрузка непрочитанных для обычного пользователя
 async function loadUnreadCountForUser() {
   try {
     const snapshot = await window.getDocs(window.collection(window.db, "messages"));
     let count = 0;
     snapshot.forEach(doc => {
       const data = doc.data();
-      if (data.to === currentUser.uid && data.from === 'admin' && !data.read) count++;
+      if (data.to === currentUser.uid && data.from === ADMIN_UID && !data.read) {
+        count++;
+      }
     });
-    unreadMessages = { admin: count };
+    unreadMessages = { [ADMIN_UID]: count };
+    console.log("📊 Непрочитанные для пользователя:", count);
     updateChatBadge();
   } catch (e) { console.error("Ошибка загрузки непрочитанных:", e); }
 }
 
-// Обновление бейджа уведомлений
 function updateChatBadge() {
   const chatBtn = document.getElementById('chat-btn');
   if (!chatBtn) return;
   
-  // Удаляем старый бейдж если есть
   const oldBadge = chatBtn.querySelector('.chat-badge');
   if (oldBadge) oldBadge.remove();
   
-  // Считаем общее количество непрочитанных
   let total = 0;
   if (document.getElementById('admin-chat-section')?.classList.contains('hidden')) {
-    // Обычный пользователь
-    total = unreadMessages['admin'] || 0;
+    total = unreadMessages[ADMIN_UID] || 0;
   } else {
-    // Админ
     total = Object.values(unreadMessages).reduce((a, b) => a + b, 0);
   }
+  
+  console.log("🔔 Обновление бейджа:", total);
   
   if (total > 0) {
     const badge = document.createElement('span');
@@ -598,36 +609,34 @@ function updateChatBadge() {
   }
 }
 
-// Сброс бейджа при открытии чата
 function clearUnreadBadge() {
   const chatBtn = document.getElementById('chat-btn');
   if (!chatBtn) return;
   const badge = chatBtn.querySelector('.chat-badge');
   if (badge) badge.remove();
-  
-  // Помечаем сообщения как прочитанные
   markMessagesAsRead();
 }
 
-// Пометка сообщений как прочитанных
 async function markMessagesAsRead() {
   if (!currentUser) return;
   try {
-    let chatWith = 'admin';
+    let chatWith = ADMIN_UID;
     const adminSection = document.getElementById('admin-chat-section');
     if (adminSection && !adminSection.classList.contains('hidden') && currentChatUser) {
       chatWith = currentChatUser;
     }
     
     const snapshot = await window.getDocs(window.collection(window.db, "messages"));
+    let updated = 0;
     snapshot.forEach(async doc => {
       const data = doc.data();
-      if (data.to === currentUser.uid && !data.read && ((data.from === chatWith) || (chatWith === 'admin' && data.from === 'admin'))) {
+      if (data.to === currentUser.uid && !data.read && data.from === chatWith) {
         await window.setDoc(window.doc(window.db, "messages", doc.id), { read: true }, { merge: true });
+        updated++;
       }
     });
+    console.log("✅ Помечено прочитанными:", updated);
     
-    // Обновляем счётчик
     if (document.getElementById('admin-chat-section')?.classList.contains('hidden')) {
       loadUnreadCountForUser();
     } else {
@@ -636,16 +645,17 @@ async function markMessagesAsRead() {
   } catch (e) { console.error("Ошибка пометки прочитанных:", e); }
 }
 
-// Загрузка сообщений с историей
 function loadChatMessages() {
   const messagesContainer = document.getElementById('chat-messages');
   if (!messagesContainer) return;
   
-  let chatWith = 'admin';
+  let chatWith = ADMIN_UID;
   const adminSection = document.getElementById('admin-chat-section');
   if (adminSection && !adminSection.classList.contains('hidden') && currentChatUser) {
     chatWith = currentChatUser;
   }
+  
+  console.log("💬 Загрузка сообщений с:", chatWith, "текущий пользователь:", currentUser.uid);
   
   if (chatListener) chatListener();
   
@@ -654,22 +664,32 @@ function loadChatMessages() {
     const messages = [];
     snapshot.forEach(doc => {
       const data = doc.data();
-      if ((data.from === currentUser.uid && data.to === chatWith) || (data.from === chatWith && data.to === currentUser.uid)) {
+      console.log("📨 Сообщение:", { from: data.from, to: data.to, text: data.text });
+      
+      if ((data.from === currentUser.uid && data.to === chatWith) || 
+          (data.from === chatWith && data.to === currentUser.uid)) {
         messages.push({ id: doc.id, ...data });
       }
     });
-    messages.sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
-    renderMessages(messages, chatWith);
     
-    // Обновляем бейдж при новом сообщении
+    messages.sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
+    console.log("📋 Всего сообщений:", messages.length);
+    renderMessages(messages, chatWith);
     updateChatBadge();
+  }, (error) => {
+    console.error("❌ Ошибка загрузки сообщений:", error);
   });
 }
 
-// Отображение сообщений
 function renderMessages(messages, chatWith) {
   const container = document.getElementById('chat-messages');
   if (!container) return;
+  
+  if (messages.length === 0) {
+    container.innerHTML = '<p style="text-align: center; color: #888; padding: 20px;">История пуста. Напишите первое сообщение!</p>';
+    return;
+  }
+  
   container.innerHTML = messages.map(msg => {
     const isMine = msg.from === currentUser.uid;
     const time = msg.timestamp?.seconds ? new Date(msg.timestamp.seconds * 1000).toLocaleTimeString() : '';
@@ -678,18 +698,23 @@ function renderMessages(messages, chatWith) {
   container.scrollTop = container.scrollHeight;
 }
 
-// Отправка сообщения
 async function sendChatMessage() {
   const input = document.getElementById('chat-input');
   const text = input.value.trim();
   if (!text) return;
   
   try {
-    let recipientId = 'admin';
+    let recipientId = ADMIN_UID;
     const adminSection = document.getElementById('admin-chat-section');
     if (adminSection && !adminSection.classList.contains('hidden') && currentChatUser) {
       recipientId = currentChatUser;
     }
+    
+    console.log("📤 Отправка сообщения:", {
+      from: currentUser.uid,
+      to: recipientId,
+      text: text
+    });
     
     await window.setDoc(window.doc(window.collection(window.db, "messages")), {
       from: currentUser.uid,
@@ -700,12 +725,13 @@ async function sendChatMessage() {
     });
     
     input.value = '';
-    
-    // Обновляем бейдж у получателя (в реальном времени через snapshot)
-  } catch (e) { console.error("Ошибка отправки:", e); alert("Ошибка отправки: " + e.message); }
+    console.log("✅ Сообщение отправлено!");
+  } catch (e) { 
+    console.error("Ошибка отправки:", e); 
+    alert("Ошибка отправки: " + e.message); 
+  }
 }
 
-// Отправка по Enter
 document.addEventListener('DOMContentLoaded', () => {
   const chatInput = document.getElementById('chat-input');
   if (chatInput) chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendChatMessage(); });
