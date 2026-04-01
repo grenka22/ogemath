@@ -5,9 +5,9 @@ let hintTimers = {};
 let currentTopicFilter = "all";
 
 // ==================== ДАННЫЕ ====================
-
 let theoryData = [];
 let practiceData = [];
+let testData = [];
 
 const topicsList = [
   { id: "all", name: "🎲 Все темы" },
@@ -18,7 +18,6 @@ const topicsList = [
 ];
 
 // ==================== ИНИЦИАЛИЗАЦИЯ ====================
-
 window.addEventListener('DOMContentLoaded', async () => {
   console.log("🚀 Приложение загружается...");
   
@@ -26,45 +25,45 @@ window.addEventListener('DOMContentLoaded', async () => {
     console.error("❌ Firebase ещё не загружен!");
     return;
   }
-// 🎨 Загружаем сохранённую тему!
+
+  // 🎨 Загружаем сохранённую тему
   loadTheme();
 
   // Загружаем данные из Firebase
   await loadTheoryFromFirebase();
   await loadPracticeFromFirebase();
+  await loadTestsFromFirebase();
 
-  // Загружаем данные из Firebase
-  await loadTheoryFromFirebase();
-  await loadPracticeFromFirebase();
-
- window.onAuthStateChanged(window.auth, async (user) => {
-  if (user) {
-    currentUser = user;
-    document.getElementById('login-screen')?.classList.add('hidden');
-    document.getElementById('register-screen')?.classList.add('hidden');
-    document.getElementById('main-menu')?.classList.remove('hidden');
-    
-    document.getElementById('user-name').textContent = currentUsername || user.email.split('@')[0];
-    await loadUserData();
-    
-    // 🎮 Показываем игру на память при входе!
-    showMemoryGame();
-    checkChatAccess();
-  } else {
-    currentUser = null;
-    currentUsername = null;
-    document.getElementById('login-screen')?.classList.remove('hidden');
-    document.getElementById('register-screen')?.classList.add('hidden');
-    document.getElementById('main-menu')?.classList.add('hidden');
-  }
-});
+  window.onAuthStateChanged(window.auth, async (user) => {
+    if (user) {
+      currentUser = user;
+      document.getElementById('login-screen')?.classList.add('hidden');
+      document.getElementById('register-screen')?.classList.add('hidden');
+      document.getElementById('main-menu')?.classList.remove('hidden');
+      
+      document.getElementById('user-name').textContent = currentUsername || user.email.split('@')[0];
+      await loadUserData();
+      
+      // 🎮 Показываем игру на память при входе!
+      showMemoryGame();
+      
+      // 💬 Проверка доступа к чату
+      checkChatAccess();
+    } else {
+      currentUser = null;
+      currentUsername = null;
+      document.getElementById('login-screen')?.classList.remove('hidden');
+      document.getElementById('register-screen')?.classList.add('hidden');
+      document.getElementById('main-menu')?.classList.add('hidden');
+    }
+  });
   
   initTopics();
   initImagePreview();
+  initTestImagePreview();
 });
 
 // ==================== ЗАГРУЗКА ДАННЫХ ИЗ FIREBASE ====================
-
 async function loadTheoryFromFirebase() {
   try {
     const snapshot = await window.getDocs(window.collection(window.db, "theory"));
@@ -80,7 +79,6 @@ async function loadTheoryFromFirebase() {
     theoryData = [];
   }
 }
-
 
 async function loadPracticeFromFirebase() {
   try {
@@ -98,8 +96,23 @@ async function loadPracticeFromFirebase() {
   }
 }
 
-// ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
+async function loadTestsFromFirebase() {
+  try {
+    const snapshot = await window.getDocs(window.collection(window.db, "tests"));
+    testData = [];
+    if (!snapshot.empty) {
+      snapshot.forEach(doc => {
+        testData.push({ id: doc.id, ...doc.data() });
+      });
+    }
+    console.log("📋 Тесты загружены:", testData.length);
+  } catch (e) {
+    console.error("❌ Ошибка загрузки тестов:", e);
+    testData = [];
+  }
+}
 
+// ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
 function initTopics() {
   const grid = document.getElementById('topics-grid');
   if (!grid) return;
@@ -126,8 +139,20 @@ function initImagePreview() {
   }
 }
 
-// ==================== НАВИГАЦИЯ ====================
+function initTestImagePreview() {
+  const input = document.getElementById('test-question-image-url');
+  const preview = document.getElementById('test-image-preview');
+  if (input && preview) {
+    input.addEventListener('input', function() {
+      const url = this.value.trim();
+      preview.innerHTML = url && url.startsWith('http') 
+        ? `<img src="${url}" style="max-width:300px;max-height:200px;border-radius:5px;border:2px solid #ddd;">` 
+        : '';
+    });
+  }
+}
 
+// ==================== НАВИГАЦИЯ ====================
 function showScreen(screenId) {
   document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
   document.getElementById(screenId)?.classList.remove('hidden');
@@ -135,10 +160,13 @@ function showScreen(screenId) {
   if (screenId === 'theory-screen') showTheoryList();
   if (screenId === 'practice-screen') showTopicSelection();
   if (screenId === 'profile-screen') loadProfileStats();
+  if (screenId === 'test-screen') {
+    loadTestsFromFirebase();
+    showTestTopicSelection();
+  }
 }
 
 // ==================== АВТОРИЗАЦИЯ ====================
-
 async function register() {
   const username = document.getElementById('register-username').value.trim();
   const password = document.getElementById('register-password').value;
@@ -163,7 +191,7 @@ async function register() {
     
     await window.setDoc(window.doc(window.db, "users", cred.user.uid), {
       username, email: fakeEmail, createdAt: new Date(),
-      progress: {}, mistakes: [], isAdmin: false
+      progress: {}, mistakes: [], isAdmin: false, hasChatAccess: false
     });
     
     alert('✅ Регистрация успешна! Теперь войдите.');
@@ -226,7 +254,6 @@ function updateProgress(progress) {
 }
 
 // ==================== ТЕОРИЯ ====================
-
 function showTheoryList() {
   const list = document.getElementById('theory-list');
   if (!list) return;
@@ -251,7 +278,6 @@ function showTheoryDetail(id) {
 }
 
 // ==================== ПРАКТИКА ====================
-
 function getTasksForCurrentTopic() {
   return currentTopicFilter === "all" ? practiceData : practiceData.filter(t => t.topic === currentTopicFilter);
 }
@@ -459,7 +485,6 @@ async function loadProfileStats() {
 }
 
 // ==================== АДМИНКА ====================
-
 function showAdminTab(tabName) {
   document.querySelectorAll('.admin-tab-content').forEach(t => t.classList.add('hidden'));
   document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
@@ -468,6 +493,7 @@ function showAdminTab(tabName) {
   
   if (tabName === 'users') loadAllUsers();
   else if (tabName === 'tasks') loadAllTasks();
+  else if (tabName === 'tests') loadTestsAdmin();
   else if (tabName === 'theory') loadTheoryAdmin();
 }
 
@@ -484,12 +510,19 @@ async function loadAllUsers() {
       const data = d.data();
       const prog = data.progress || {};
       const errs = data.mistakes || [];
+      const hasChat = data.hasChatAccess === true;
       return `
         <div class="user-card">
           <h4>${data.username||'Без имени'} (${data.email||'нет'})</h4>
           <p>Зарегистрирован: ${data.createdAt ? new Date(data.createdAt.seconds*1000).toLocaleDateString() : '?'}</p>
           <p>Выполнено: ${Object.keys(prog).length} | Ошибок: ${errs.length}</p>
           <p>Статус: ${data.isAdmin ? '👑 Админ' : '👤 Ученик'}</p>
+          <p>Чат: ${hasChat ? '✅ Доступен' : '❌ Запрещён'}</p>
+          <button onclick="toggleChatAccess('${d.id}', ${hasChat})" 
+                  class="${hasChat ? 'delete-btn' : 'edit-btn'}" 
+                  style="margin-top: 10px;">
+            ${hasChat ? '❌ Забрать доступ к чату' : '✅ Дать доступ к чату'}
+          </button>
         </div>
       `;
     }).join('');
@@ -532,7 +565,7 @@ async function addNewTask() {
     return;
   }
   
-  const names = { fractions:'Дроби и проценты', powers:'Степени и корни', equations:'Уравнения', geometry:'Геометрия' };
+  const names = { fractions:'Задание №6', powers:'Задание №7', equations:'Задание №8', geometry:'Задание №9' };
   
   const newTask = {
     id: Date.now(),
@@ -602,7 +635,7 @@ function editTask(index) {
 }
 
 async function updateTask(index) {
-  const names = { fractions:'Дроби и проценты', powers:'Степени и корни', equations:'Уравнения', geometry:'Геометрия' };
+  const names = { fractions:'Задание №6', powers:'Задание №7', equations:'Задание №8', geometry:'Задание №9' };
   
   practiceData[index] = {
     ...practiceData[index],
@@ -658,7 +691,6 @@ async function deleteTask(index) {
 }
 
 // ==================== УПРАВЛЕНИЕ ТЕОРИЕЙ ====================
-
 function loadTheoryAdmin() {
   const list = document.getElementById('theory-list-admin');
   if (!list) return;
@@ -760,20 +792,302 @@ async function deleteTheory(index) {
     console.error("❌ Ошибка удаления:", e);
     alert('Ошибка: ' + e.message);
   }
+}
 
+// ==================== ТЕСТЫ ====================
+let currentTestTopic = "all";
+let currentTestIndex = 0;
+let testAnswers = {};
+let testScore = 0;
+
+function initTestTopics() {
+  const grid = document.getElementById('test-topics-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  topicsList.forEach(topic => {
+    const btn = document.createElement('button');
+    btn.className = 'topic-btn';
+    btn.textContent = topic.name;
+    btn.onclick = () => startTest(topic.id);
+    grid.appendChild(btn);
+  });
+}
+
+function showTestTopicSelection() {
+  document.getElementById('test-topic-selection')?.classList.remove('hidden');
+  document.getElementById('test-container')?.classList.add('hidden');
+  document.getElementById('test-final-result')?.classList.add('hidden');
+  initTestTopics();
+}
+
+function startTest(topicId) {
+  currentTestTopic = topicId;
+  currentTestIndex = 0;
+  testAnswers = {};
+  testScore = 0;
+  
+  document.getElementById('test-topic-selection')?.classList.add('hidden');
+  document.getElementById('test-container')?.classList.remove('hidden');
+  document.getElementById('test-final-result')?.classList.add('hidden');
+  
+  loadTestQuestion(0);
+}
+
+function getTestQuestionsForTopic() {
+  if (currentTestTopic === "all") return testData;
+  return testData.filter(q => q.topic === currentTestTopic);
+}
+
+function loadTestQuestion(index) {
+  const questions = getTestQuestionsForTopic();
+  if (questions.length === 0) {
+    document.getElementById('test-question-text').textContent = 'Вопросов пока нет. Добавьте их в админке!';
+    return;
+  }
+  
+  if (index < 0) index = 0;
+  if (index >= questions.length) index = questions.length - 1;
+  
+  currentTestIndex = index;
+  const question = questions[index];
+  
+  document.getElementById('test-question-number').textContent = index + 1;
+  document.getElementById('test-counter').textContent = `Вопрос ${index + 1} из ${questions.length}`;
+  document.getElementById('test-question-text').textContent = question.question;
+  document.getElementById('test-result-message').innerHTML = '';
+  
+  // Изображение
+  const imgDisplay = document.getElementById('test-image-display');
+  if (imgDisplay) {
+    imgDisplay.innerHTML = '';
+    if (question.imageUrl && question.imageUrl.trim() !== '' && question.imageUrl.startsWith('http')) {
+      imgDisplay.innerHTML = `<img src="${question.imageUrl}" class="task-image" alt="Вопрос">`;
+    }
+  }
+  
+  // Варианты ответов
+  const answersContainer = document.getElementById('test-answers');
+  if (answersContainer) {
+    answersContainer.innerHTML = '';
+    const options = [question.option1, question.option2, question.option3, question.option4].filter(opt => opt && opt.trim() !== '');
+    
+    options.forEach((option, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'test-answer-btn';
+      btn.textContent = option;
+      btn.dataset.index = i;
+      btn.onclick = () => selectTestAnswer(index, i, btn);
+      
+      if (testAnswers[index] !== undefined) {
+        btn.disabled = true;
+        if (i === testAnswers[index]) btn.classList.add('selected');
+        if (i === parseInt(question.correctOption) - 1) btn.classList.add('correct');
+        if (testAnswers[index] === i && i !== parseInt(question.correctOption) - 1) btn.classList.add('wrong');
+      }
+      answersContainer.appendChild(btn);
+    });
+  }
+  
+  document.getElementById('test-prev-btn').style.display = index > 0 ? 'inline-block' : 'none';
+  document.getElementById('test-next-btn').style.display = index < questions.length - 1 ? 'inline-block' : 'none';
+  document.getElementById('test-finish-btn').style.display = index === questions.length - 1 ? 'inline-block' : 'none';
+}
+
+function selectTestAnswer(questionIndex, answerIndex, btn) {
+  if (testAnswers[questionIndex] !== undefined) return;
+  
+  testAnswers[questionIndex] = answerIndex;
+  const questions = getTestQuestionsForTopic();
+  const question = questions[questionIndex];
+  const correctIndex = parseInt(question.correctOption) - 1;
+  
+  const allBtns = document.querySelectorAll('.test-answer-btn');
+  allBtns.forEach(b => b.disabled = true);
+  
+  if (answerIndex === correctIndex) {
+    btn.classList.add('correct');
+    testScore++;
+  } else {
+    btn.classList.add('wrong');
+    allBtns[correctIndex]?.classList.add('correct');
+  }
+  
+  if (question.explanation) {
+    document.getElementById('test-result-message').innerHTML = `<div class="explanation-box"><p><strong>Объяснение:</strong> ${question.explanation}</p></div>`;
+  }
+}
+
+function previousTestQuestion() { loadTestQuestion(currentTestIndex - 1); }
+function nextTestQuestion() { loadTestQuestion(currentTestIndex + 1); }
+
+function finishTest() {
+  const questions = getTestQuestionsForTopic();
+  const answeredCount = Object.keys(testAnswers).length;
+  
+  if (answeredCount < questions.length && !confirm(`Вы ответили на ${answeredCount} из ${questions.length} вопросов. Завершить тест?`)) {
+    return;
+  }
+  
+  document.getElementById('test-final-result').classList.remove('hidden');
+  document.getElementById('test-correct-count').textContent = testScore;
+  document.getElementById('test-total-count').textContent = questions.length;
+  document.getElementById('test-percent').textContent = Math.round((testScore / questions.length) * 100);
+  
+  saveTestResult(testScore, questions.length);
+}
+
+async function saveTestResult(score, total) {
+  if (!currentUser) return;
+  try {
+    const userRef = window.doc(window.db, "users", currentUser.uid);
+    const userDoc = await window.getDoc(userRef);
+    if (userDoc.exists()) {
+      const data = userDoc.data();
+      const testResults = data.testResults || [];
+      testResults.push({ date: new Date(), topic: currentTestTopic, score, total, percent: Math.round((score / total) * 100) });
+      if (testResults.length > 10) testResults.splice(0, testResults.length - 10);
+      await window.setDoc(userRef, { testResults }, { merge: true });
+    }
+  } catch (e) { console.error("Ошибка сохранения результата теста:", e); }
+}
+
+function restartTest() { startTest(currentTestTopic); }
+
+// ==================== АДМИНКА: ТЕСТЫ ====================
+function loadTestsAdmin() {
+  const list = document.getElementById('tests-list-admin');
+  if (!list) return;
+  list.innerHTML = testData.length === 0 ? '<p>Вопросов для тестов пока нет</p>' : testData.map((t, i) => `
+    <div class="test-question-card">
+      <div class="test-question-card-header">
+        <strong>Вопрос #${t.id}</strong>
+        <span class="task-topic">${t.topicName || 'Общая'}</span>
+      </div>
+      <p>${t.question}</p>
+      ${t.imageUrl ? `<img src="${t.imageUrl}" alt="Вопрос">` : ''}
+      <p><strong>Варианты:</strong> ${t.option1} | ${t.option2} | ${t.option3} | ${t.option4}</p>
+      <p><strong>Правильный:</strong> Вариант ${t.correctOption}</p>
+      <button onclick="editTestQuestion(${i})" class="edit-btn">✏️</button>
+      <button onclick="deleteTestQuestion(${i})" class="delete-btn">🗑</button>
+    </div>
+  `).join('');
+}
+
+async function addTestQuestion() {
+  const topic = document.getElementById('test-question-topic').value;
+  const question = document.getElementById('test-question-text').value;
+  const imageUrl = document.getElementById('test-question-image-url').value.trim();
+  const option1 = document.getElementById('test-option-1').value;
+  const option2 = document.getElementById('test-option-2').value;
+  const option3 = document.getElementById('test-option-3').value;
+  const option4 = document.getElementById('test-option-4').value;
+  const correctOption = document.getElementById('test-correct-option').value;
+  const explanation = document.getElementById('test-question-explanation').value;
+  
+  if (!question || !option1 || !option2 || !correctOption) {
+    document.getElementById('test-admin-message').textContent = '❌ Заполните обязательные поля!';
+    document.getElementById('test-admin-message').className = 'error-msg';
+    return;
+  }
+  
+  const names = { fractions:'Задание №6', powers:'Задание №7', equations:'Задание №8', geometry:'Задание №9' };
+  
+  const newQuestion = {
+    id: Date.now(), topic, topicName: names[topic], question,
+    imageUrl: imageUrl || null, option1, option2, option3, option4,
+    correctOption, explanation
+  };
+  
+  try {
+    await window.setDoc(window.doc(window.db, "tests", newQuestion.id.toString()), newQuestion);
+    testData.push(newQuestion);
+    document.getElementById('test-admin-message').textContent = '✅ Вопрос сохранён!';
+    document.getElementById('test-admin-message').className = 'success-msg';
+    
+    document.getElementById('test-question-topic').value = 'fractions';
+    document.getElementById('test-question-text').value = '';
+    document.getElementById('test-question-image-url').value = '';
+    document.getElementById('test-option-1').value = '';
+    document.getElementById('test-option-2').value = '';
+    document.getElementById('test-option-3').value = '';
+    document.getElementById('test-option-4').value = '';
+    document.getElementById('test-question-explanation').value = '';
+    document.getElementById('test-image-preview').innerHTML = '';
+    
+    loadTestsAdmin();
+  } catch (e) {
+    document.getElementById('test-admin-message').textContent = '❌ Ошибка: ' + e.message;
+    document.getElementById('test-admin-message').className = 'error-msg';
+  }
+}
+
+function editTestQuestion(index) {
+  const t = testData[index];
+  if (!t) return;
+  
+  document.getElementById('test-question-topic').value = t.topic;
+  document.getElementById('test-question-text').value = t.question;
+  document.getElementById('test-question-image-url').value = t.imageUrl || '';
+  document.getElementById('test-option-1').value = t.option1;
+  document.getElementById('test-option-2').value = t.option2;
+  document.getElementById('test-option-3').value = t.option3;
+  document.getElementById('test-option-4').value = t.option4;
+  document.getElementById('test-correct-option').value = t.correctOption;
+  document.getElementById('test-question-explanation').value = t.explanation || '';
+  
+  const preview = document.getElementById('test-image-preview');
+  if (preview && t.imageUrl) preview.innerHTML = `<img src="${t.imageUrl}" style="max-width:300px;max-height:200px;border-radius:5px;">`;
+  
+  const btn = document.querySelector('#admin-tests .save-btn');
+  if (btn) { btn.textContent = '🔄 Обновить'; btn.onclick = () => updateTestQuestion(index); }
+  document.getElementById('test-admin-message').textContent = '✏️ Редактирование';
+}
+
+async function updateTestQuestion(index) {
+  const names = { fractions:'Задание №6', powers:'Задание №7', equations:'Задание №8', geometry:'Задание №9' };
+  
+  testData[index] = {
+    ...testData[index],
+    topic: document.getElementById('test-question-topic').value,
+    topicName: names[document.getElementById('test-question-topic').value],
+    question: document.getElementById('test-question-text').value,
+    imageUrl: document.getElementById('test-question-image-url').value.trim() || null,
+    option1: document.getElementById('test-option-1').value,
+    option2: document.getElementById('test-option-2').value,
+    option3: document.getElementById('test-option-3').value,
+    option4: document.getElementById('test-option-4').value,
+    correctOption: document.getElementById('test-correct-option').value,
+    explanation: document.getElementById('test-question-explanation').value
+  };
+  
+  try {
+    const t = testData[index];
+    await window.setDoc(window.doc(window.db, "tests", t.id.toString()), t);
+    document.getElementById('test-admin-message').textContent = '✅ Обновлено!';
+    document.getElementById('test-admin-message').className = 'success-msg';
+    
+    const btn = document.querySelector('#admin-tests .save-btn');
+    if (btn) { btn.textContent = '💾 Сохранить'; btn.onclick = addTestQuestion; }
+    loadTestsAdmin();
+  } catch (e) {
+    document.getElementById('test-admin-message').textContent = '❌ Ошибка: ' + e.message;
+    document.getElementById('test-admin-message').className = 'error-msg';
+  }
+}
+
+async function deleteTestQuestion(index) {
+  if (!confirm('Удалить вопрос?')) return;
+  const t = testData[index];
+  try {
+    await window.deleteDoc(window.doc(window.db, "tests", t.id.toString()));
+    testData.splice(index, 1);
+    loadTestsAdmin();
+  } catch (e) { alert('Ошибка: ' + e.message); }
 }
 
 // ==================== ИГРА НА ПАМЯТЬ ====================
+let gameCards = [], flippedCards = [], matchedPairs = 0, moves = 0, gameTimer = null, gameTime = 0, isGameActive = false;
 
-let gameCards = [];
-let flippedCards = [];
-let matchedPairs = 0;
-let moves = 0;
-let gameTimer = null;
-let gameTime = 0;
-let isGameActive = false;
-
-// Данные для игры (формулы и правила ОГЭ)
 const memoryGameData = [
   { id: 1, question: "Площадь круга", answer: "S = πr²" },
   { id: 2, question: "Сумма углов треугольника", answer: "180°" },
@@ -785,72 +1099,43 @@ const memoryGameData = [
   { id: 8, question: "Корень из произведения", answer: "√(ab) = √a × √b" }
 ];
 
-// Показываем игру при входе (кроме админов)
 async function showMemoryGame() {
   if (!currentUser) return;
-  
-  // Проверяем, админ ли пользователь
   const userDoc = await window.getDoc(window.doc(window.db, "users", currentUser.uid));
-  if (userDoc.exists() && userDoc.data().isAdmin) {
-    return; // Админам не показываем игру
-  }
+  if (userDoc.exists() && userDoc.data().isAdmin) return;
   
-  // Показываем модальное окно
   document.getElementById('memory-game-modal').classList.remove('hidden');
-  
-  // Инициализируем игру
   initMemoryGame();
 }
 
-// Инициализация игры
 function initMemoryGame() {
-  // Сброс переменных
-  flippedCards = [];
-  matchedPairs = 0;
-  moves = 0;
-  gameTime = 0;
-  isGameActive = true;
-  
-  // Обновляем статистику
+  flippedCards = []; matchedPairs = 0; moves = 0; gameTime = 0; isGameActive = true;
   document.getElementById('game-moves').textContent = '0';
   document.getElementById('game-time').textContent = '0:00';
   document.getElementById('game-pairs').textContent = '0/8';
   document.getElementById('game-result').classList.add('hidden');
   
-  // Создаём карточки (вопрос + ответ для каждой пары)
   const cards = [];
   memoryGameData.forEach(item => {
     cards.push({ id: item.id, content: item.question, type: 'question' });
     cards.push({ id: item.id, content: item.answer, type: 'answer' });
   });
-  
-  // Перемешиваем
   shuffleArray(cards);
   
-  // Генерируем HTML
   const board = document.getElementById('game-board');
   board.innerHTML = '';
-  
   cards.forEach((card, index) => {
     const cardEl = document.createElement('div');
     cardEl.className = 'game-card';
     cardEl.dataset.id = card.id;
     cardEl.dataset.index = index;
-    cardEl.innerHTML = `
-      <div class="game-card-inner">
-        <div class="game-card-front">?</div>
-        <div class="game-card-back">${card.content}</div>
-      </div>
-    `;
+    cardEl.innerHTML = `<div class="game-card-inner"><div class="game-card-front">?</div><div class="game-card-back">${card.content}</div></div>`;
     cardEl.onclick = () => flipCard(cardEl);
     board.appendChild(cardEl);
   });
-  
-  // Запускаем таймер
   startGameTimer();
 }
 
-// Перемешивание массива (алгоритм Фишера-Йетса)
 function shuffleArray(array) {
   for (let i = array.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -858,140 +1143,80 @@ function shuffleArray(array) {
   }
 }
 
-// Переворот карточки
 function flipCard(cardEl) {
-  if (!isGameActive) return;
-  if (cardEl.classList.contains('flipped')) return;
-  if (cardEl.classList.contains('matched')) return;
-  if (flippedCards.length >= 2) return;
-  
+  if (!isGameActive || cardEl.classList.contains('flipped') || cardEl.classList.contains('matched') || flippedCards.length >= 2) return;
   cardEl.classList.add('flipped');
   flippedCards.push(cardEl);
-  
   if (flippedCards.length === 2) {
     moves++;
     document.getElementById('game-moves').textContent = moves;
-    
     checkMatch();
   }
 }
 
-// Проверка совпадения
 function checkMatch() {
   const [card1, card2] = flippedCards;
   const match = card1.dataset.id === card2.dataset.id;
-  
   if (match) {
-    // Совпадение!
-    card1.classList.add('matched');
-    card2.classList.add('matched');
+    card1.classList.add('matched'); card2.classList.add('matched');
     matchedPairs++;
     document.getElementById('game-pairs').textContent = `${matchedPairs}/8`;
-    
     flippedCards = [];
-    
-    // Проверка победы
-    if (matchedPairs === 8) {
-      endGame();
-    }
+    if (matchedPairs === 8) endGame();
   } else {
-    // Нет совпадения
-    setTimeout(() => {
-      card1.classList.remove('flipped');
-      card2.classList.remove('flipped');
-      flippedCards = [];
-    }, 1000);
+    setTimeout(() => { card1.classList.remove('flipped'); card2.classList.remove('flipped'); flippedCards = []; }, 1000);
   }
 }
 
-// Запуск таймера
 function startGameTimer() {
   if (gameTimer) clearInterval(gameTimer);
-  
   gameTimer = setInterval(() => {
     gameTime++;
     const minutes = Math.floor(gameTime / 60);
     const seconds = gameTime % 60;
-    document.getElementById('game-time').textContent = 
-      `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    document.getElementById('game-time').textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
   }, 1000);
 }
 
-// Конец игры
 function endGame() {
   isGameActive = false;
   clearInterval(gameTimer);
-  
   const minutes = Math.floor(gameTime / 60);
   const seconds = gameTime % 60;
   const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-  
   document.getElementById('final-time').textContent = timeStr;
   document.getElementById('final-moves').textContent = moves;
   document.getElementById('game-result').classList.remove('hidden');
-  
-  // Сохраняем результат
   saveGameResult(timeStr, moves);
 }
 
-// Сохранение результата игры
 async function saveGameResult(time, movesCount) {
   if (!currentUser) return;
-  
   try {
     const userRef = window.doc(window.db, "users", currentUser.uid);
     const userDoc = await window.getDoc(userRef);
-    
     if (userDoc.exists()) {
       const data = userDoc.data();
       const gameResults = data.gameResults || [];
-      
-      gameResults.push({
-        date: new Date(),
-        time: time,
-        moves: movesCount
-      });
-      
-      // Храним последние 10 результатов
-      if (gameResults.length > 10) {
-        gameResults.splice(0, gameResults.length - 10);
-      }
-      
+      gameResults.push({ date: new Date(), time, moves: movesCount });
+      if (gameResults.length > 10) gameResults.splice(0, gameResults.length - 10);
       await window.setDoc(userRef, { gameResults }, { merge: true });
     }
-  } catch (e) {
-    console.error("Ошибка сохранения результата игры:", e);
-  }
+  } catch (e) { console.error("Ошибка сохранения результата игры:", e); }
 }
 
-// Закрыть игру
-function closeMemoryGame() {
-  isGameActive = false;
-  clearInterval(gameTimer);
-  document.getElementById('memory-game-modal').classList.add('hidden');
-}
-
-// Перезапуск игры
-function restartMemoryGame() {
-  initMemoryGame();
-}
-
-// Обновить onAuthStateChanged для показа игры
-// Найди в коде window.onAuthStateChanged и добавь вызов showMemoryGame():
+function closeMemoryGame() { isGameActive = false; clearInterval(gameTimer); document.getElementById('memory-game-modal').classList.add('hidden'); }
+function restartMemoryGame() { initMemoryGame(); }
 
 // ==================== ПЕРЕКЛЮЧЕНИЕ ТЕМ ====================
-
-// Загрузка сохранённой темы
 function loadTheme() {
   const savedTheme = localStorage.getItem('theme') || 'dark';
   applyTheme(savedTheme);
 }
 
-// Применение темы
 function applyTheme(theme) {
   const body = document.body;
   const toggleBtn = document.getElementById('theme-toggle');
-  
   if (theme === 'light') {
     body.classList.add('light-theme');
     if (toggleBtn) toggleBtn.textContent = '☀️ Светлая';
@@ -999,30 +1224,21 @@ function applyTheme(theme) {
     body.classList.remove('light-theme');
     if (toggleBtn) toggleBtn.textContent = '🌙 Тёмная';
   }
-  
   localStorage.setItem('theme', theme);
 }
 
-// Переключение темы
 function toggleTheme() {
   const body = document.body;
   const isLight = body.classList.contains('light-theme');
-  const newTheme = isLight ? 'dark' : 'light';
-  applyTheme(newTheme);
+  applyTheme(isLight ? 'dark' : 'light');
 }
 
-// Вызываем загрузку темы при старте
-// Добавь это в window.addEventListener('DOMContentLoaded', ...)
-
 // ==================== ЧАТ ====================
-
 let chatListener = null;
 let currentChatUser = null;
 
-// Проверка доступа к чату
 async function checkChatAccess() {
   if (!currentUser) return;
-  
   const chatBtn = document.getElementById('chat-btn');
   if (!chatBtn) return;
   
@@ -1030,44 +1246,38 @@ async function checkChatAccess() {
     const userDoc = await window.getDoc(window.doc(window.db, "users", currentUser.uid));
     if (userDoc.exists()) {
       const data = userDoc.data();
+      const isAdmin = data.isAdmin === true;
+      const hasChat = data.hasChatAccess === true;
       
-      // Показываем кнопку если: админ ИЛИ есть доступ
-      if (data.isAdmin === true || data.hasChatAccess === true) {
+      if (isAdmin || hasChat) {
         chatBtn.classList.remove('hidden');
-        
-        // Если админ — показываем дополнительные секции
-        if (data.isAdmin === true) {
+        if (isAdmin) {
           document.getElementById('admin-chat-section')?.classList.remove('hidden');
           document.getElementById('admin-chat-manage')?.classList.remove('hidden');
           loadUsersForChat();
+        } else {
+          document.getElementById('admin-chat-section')?.classList.add('hidden');
+          document.getElementById('admin-chat-manage')?.classList.add('hidden');
         }
       } else {
         chatBtn.classList.add('hidden');
       }
     }
-  } catch (e) {
-    console.error("Ошибка проверки доступа к чату:", e);
-  }
+  } catch (e) { console.error("Ошибка проверки доступа к чату:", e); }
 }
 
-// Показать/скрыть чат
 function toggleChat() {
   const panel = document.getElementById('chat-panel');
   if (!panel) return;
-  
   if (panel.classList.contains('hidden')) {
     panel.classList.remove('hidden');
     loadChatMessages();
   } else {
     panel.classList.add('hidden');
-    if (chatListener) {
-      chatListener();
-      chatListener = null;
-    }
+    if (chatListener) { chatListener(); chatListener = null; }
   }
 }
 
-// Загрузка пользователей для админа
 async function loadUsersForChat() {
   const select = document.getElementById('chat-user-select');
   const list = document.getElementById('users-access-list');
@@ -1080,144 +1290,102 @@ async function loadUsersForChat() {
     
     snapshot.forEach(doc => {
       const data = doc.data();
-      if (doc.id === currentUser.uid) return; // не показываем себя
+      if (doc.id === currentUser.uid) return;
+      const userName = data.username || data.email || 'Без имени';
+      const hasChat = data.hasChatAccess === true;
       
-      // Добавляем в список для чата
       const option = document.createElement('option');
       option.value = doc.id;
-      option.textContent = `${data.username || data.email} ${data.hasChatAccess ? '✅' : ''}`;
+      option.textContent = `${userName} ${hasChat ? '✅' : ''}`;
       select.appendChild(option);
       
-      // Добавляем в список управления доступом (для админа)
       if (list) {
         const item = document.createElement('div');
         item.className = 'user-access-item';
         item.style.cssText = 'display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #333;';
-        item.innerHTML = `
-          <span style="color: #e0e0e0;">${data.username || data.email}</span>
-          <button class="${data.hasChatAccess ? 'revoke-btn' : 'grant-btn'}" 
-                  onclick="toggleChatAccess('${doc.id}', ${data.hasChatAccess})"
-                  style="padding: 5px 10px; border: none; border-radius: 5px; cursor: pointer; font-size: 12px; background: ${data.hasChatAccess ? '#ff4444' : '#00ff88'}; color: ${data.hasChatAccess ? 'white' : '#0a0a0a'};">
-            ${data.hasChatAccess ? '❌ Забрать' : '✅ Дать'}
-          </button>
-        `;
+        item.innerHTML = `<span style="color: #e0e0e0;">${userName}</span>
+          <button class="${hasChat ? 'revoke-btn' : 'grant-btn'}" 
+                  onclick="toggleChatAccess('${doc.id}', ${hasChat})"
+                  style="padding: 5px 10px; border: none; border-radius: 5px; cursor: pointer; font-size: 12px; background: ${hasChat ? '#ff4444' : '#00ff88'}; color: ${hasChat ? 'white' : '#0a0a0a'};">
+            ${hasChat ? '❌ Забрать' : '✅ Дать'}
+          </button>`;
         list.appendChild(item);
       }
     });
     
-    // Обработчик выбора пользователя
-    select.onchange = (e) => {
-      currentChatUser = e.target.value;
-      loadChatMessages();
-    };
-    
-  } catch (e) {
-    console.error("Ошибка загрузки пользователей:", e);
-  }
+    select.onchange = (e) => { currentChatUser = e.target.value; loadChatMessages(); };
+  } catch (e) { console.error("Ошибка загрузки пользователей:", e); }
 }
 
-// Выдать/забрать доступ к чату
 async function toggleChatAccess(userId, currentlyHas) {
   try {
-    await window.setDoc(window.doc(window.db, "users", userId), {
-      hasChatAccess: !currentlyHas
-    }, { merge: true });
-    
-    loadUsersForChat(); // обновить список
-  } catch (e) {
-    alert("Ошибка: " + e.message);
-  }
+    await window.setDoc(window.doc(window.db, "users", userId), { hasChatAccess: !currentlyHas }, { merge: true });
+    loadUsersForChat();
+    alert(`✅ Доступ ${!currentlyHas ? 'выдан' : 'забран'}!`);
+  } catch (e) { console.error("Ошибка:", e); alert("Ошибка: " + e.message); }
 }
 
-// Загрузка сообщений
 function loadChatMessages() {
   const messagesContainer = document.getElementById('chat-messages');
   if (!messagesContainer) return;
   
-  // Определяем с кем чатимся (для админа — выбранный пользователь, для обычного — админ)
-  const chatWith = currentChatUser || 'admin';
-  
-  // Отписываемся от предыдущего слушателя
-  if (chatListener) {
-    chatListener();
+  let chatWith = 'admin';
+  const adminSection = document.getElementById('admin-chat-section');
+  if (adminSection && !adminSection.classList.contains('hidden')) {
+    const select = document.getElementById('chat-user-select');
+    if (select?.value) chatWith = select.value;
   }
   
-  // Подписываемся на сообщения
+  if (chatListener) chatListener();
+  
   const q = window.collection(window.db, "messages");
   chatListener = window.onSnapshot(q, (snapshot) => {
     const messages = [];
-    
     snapshot.forEach(doc => {
       const data = doc.data();
-      // Показываем только сообщения между текущим юзером и собеседником
-      if ((data.from === currentUser.uid && data.to === chatWith) ||
-          (data.from === chatWith && data.to === currentUser.uid)) {
+      if ((data.from === currentUser.uid && data.to === chatWith) || (data.from === chatWith && data.to === currentUser.uid)) {
         messages.push({ id: doc.id, ...data });
       }
     });
-    
-    // Сортируем по времени
     messages.sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
-    
-    // Отображаем
-    renderMessages(messages);
+    renderMessages(messages, chatWith);
   });
 }
 
-// Отображение сообщений
-function renderMessages(messages) {
+function renderMessages(messages, chatWith) {
   const container = document.getElementById('chat-messages');
   if (!container) return;
-  
-  const chatWith = currentChatUser || 'admin';
   
   container.innerHTML = messages.map(msg => {
     const isMine = msg.from === currentUser.uid;
     const time = msg.timestamp?.seconds ? new Date(msg.timestamp.seconds * 1000).toLocaleTimeString() : '';
-    
-    return `
-      <div class="chat-message ${isMine ? 'mine' : 'other'}">
-        ${msg.text}
-        <span class="time">${time}</span>
-      </div>
-    `;
+    return `<div class="chat-message ${isMine ? 'mine' : 'other'}">${msg.text}<span class="time">${time}</span></div>`;
   }).join('');
-  
-  // Прокрутка вниз
   container.scrollTop = container.scrollHeight;
 }
 
-// Отправка сообщения
 async function sendChatMessage() {
   const input = document.getElementById('chat-input');
   const text = input.value.trim();
   if (!text) return;
   
   try {
-    const chatWith = currentChatUser || 'admin';
+    let recipientId = 'admin';
+    const adminSection = document.getElementById('admin-chat-section');
+    if (adminSection && !adminSection.classList.contains('hidden')) {
+      const select = document.getElementById('chat-user-select');
+      if (select?.value) recipientId = select.value;
+    }
     
     await window.setDoc(window.doc(window.collection(window.db, "messages")), {
-      from: currentUser.uid,
-      to: chatWith,
-      text: text,
-      timestamp: new Date(),
-      read: false
+      from: currentUser.uid, to: recipientId, text, timestamp: new Date(), read: false
     });
-    
     input.value = '';
-  } catch (e) {
-    alert("Ошибка отправки: " + e.message);
-  }
+  } catch (e) { console.error("Ошибка отправки:", e); alert("Ошибка отправки: " + e.message); }
 }
 
 // Отправка по Enter
 document.addEventListener('DOMContentLoaded', () => {
   const chatInput = document.getElementById('chat-input');
-  if (chatInput) {
-    chatInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        sendChatMessage();
-      }
-    });
-  }
+  if (chatInput) chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendChatMessage(); });
 });
