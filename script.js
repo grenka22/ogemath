@@ -11,10 +11,10 @@ let practiceData = [];
 
 const topicsList = [
   { id: "all", name: "🎲 Все темы" },
-  { id: "fractions", name: "📊 Дроби и проценты" },
-  { id: "powers", name: "🔢 Степени и корни" },
-  { id: "equations", name: "✖️ Уравнения" },
-  { id: "geometry", name: "📐 Геометрия" }
+  { id: "fractions", name: "Задание №6" },
+  { id: "powers", name: "Задание №7" },
+  { id: "equations", name: "Задание №8" },
+  { id: "geometry", name: "Задание №9" }
 ];
 
 // ==================== ИНИЦИАЛИЗАЦИЯ ====================
