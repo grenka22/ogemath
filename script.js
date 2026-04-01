@@ -221,7 +221,7 @@ async function loadUserData() {
     const adminBtn = document.getElementById('admin-btn');
     if (adminBtn) { if (data.isAdmin === true) adminBtn.classList.remove('hidden'); else adminBtn.classList.add('hidden'); }
     
-    // Показываем кнопку форума только если админ или может видеть форум
+    // 🔥 Показываем кнопку форума ТОЛЬКО если админ или может видеть форум
     const forumBtn = document.getElementById('forum-btn');
     if (forumBtn) {
       if (data.isAdmin === true || data.canSeeForum === true) {
@@ -403,7 +403,6 @@ async function createNewPost() {
   
   if (!title || !content) { alert('❌ Заполните заголовок и текст!'); return; }
   
-  // Получаем выбранных пользователей
   const checkboxes = document.querySelectorAll('#user-access-list input[type="checkbox"]:checked');
   const visibleFor = Array.from(checkboxes).map(cb => cb.value);
   
@@ -437,7 +436,6 @@ function renderPostsList() {
   const container = document.getElementById('posts-list');
   if (!container) return;
   
-  // Фильтруем посты - показываем только те, что доступны текущему пользователю
   const userPosts = forumPosts.filter(post => {
     if (currentUser.uid === ADMIN_UID) return true;
     return post.visibleFor && post.visibleFor.includes(currentUser.uid);
@@ -551,23 +549,57 @@ function showAdminTab(tabName) {
 }
 
 async function loadAllUsers() {
-  const list = document.getElementById('users-list'); if (!list) return; list.innerHTML = '<p>Загрузка...</p>';
+  const list = document.getElementById('users-list'); 
+  if (!list) return; 
+  list.innerHTML = '<p>Загрузка...</p>';
+  
   try {
     const snap = await window.getDocs(window.collection(window.db, "users"));
     if (snap.empty) { list.innerHTML = '<p>Пользователей нет</p>'; return; }
+    
     list.innerHTML = Array.from(snap.docs).map(d => {
-      const data = d.data(); const prog = data.progress || {}; const errs = data.mistakes || []; const canSeeForum = data.canSeeForum === true;
-      return `<div class="user-card"><h4>${data.username||'Без имени'} (${data.email||'нет'})</h4><p>Зарегистрирован: ${data.createdAt ? new Date(data.createdAt.seconds*1000).toLocaleDateString() : '?'}</p><p>Выполнено: ${Object.keys(prog).length} | Ошибок: ${errs.length}</p><p>Статус: ${data.isAdmin ? '👑 Админ' : '👤 Ученик'}</p><p>Форум: ${canSeeForum ? '✅ Доступен' : '❌ Запрещён'}</p><button onclick="toggleForumAccess('${d.id}', ${canSeeForum})" class="${canSeeForum ? 'delete-btn' : 'edit-btn'}" style="margin-top: 10px;">${canSeeForum ? '❌ Забрать доступ' : '✅ Дать доступ'}</button></div>`;
+      const data = d.data(); 
+      const prog = data.progress || {}; 
+      const errs = data.mistakes || []; 
+      const canSeeForum = data.canSeeForum === true;
+      
+      return `<div class="user-card">
+        <h4>${data.username||'Без имени'} (${data.email||'нет'})</h4>
+        <p>Зарегистрирован: ${data.createdAt ? new Date(data.createdAt.seconds*1000).toLocaleDateString() : '?'}</p>
+        <p>Выполнено: ${Object.keys(prog).length} | Ошибок: ${errs.length}</p>
+        <p>Статус: ${data.isAdmin ? '👑 Админ' : '👤 Ученик'}</p>
+        <p>Форум: ${canSeeForum ? '✅ Доступен' : '❌ Запрещён'}</p>
+        <button onclick="toggleForumAccess('${d.id}', ${canSeeForum})" class="${canSeeForum ? 'delete-btn' : 'edit-btn'}" style="margin-top: 10px;">
+          ${canSeeForum ? '❌ Забрать доступ' : '✅ Дать доступ'}
+        </button>
+      </div>`;
     }).join('');
-  } catch (e) { list.innerHTML = `<p class="error">Ошибка: ${e.message}</p>`; }
+  } catch (e) { 
+    list.innerHTML = `<p class="error">Ошибка: ${e.message}</p>`; 
+  }
 }
 
+// 🔥 ИСПРАВЛЕННАЯ ФУНКЦИЯ ВЫДАЧИ ДОСТУПА
 async function toggleForumAccess(userId, currentlyHas) {
   try {
-    await window.setDoc(window.doc(window.db, "users", userId), { canSeeForum: !currentlyHas }, { merge: true });
-    loadAllUsers();
+    console.log("🔄 Выдача доступа:", userId, "сейчас:", currentlyHas);
+    
+    const userRef = window.doc(window.db, "users", userId);
+    await window.setDoc(userRef, { 
+      canSeeForum: !currentlyHas 
+    }, { merge: true });
+    
+    console.log("✅ Доступ обновлён!");
+    
+    // Перезагружаем список
+    await loadAllUsers();
+    await loadAllUsersData();
+    
     alert(`✅ Доступ ${!currentlyHas ? 'выдан' : 'забран'}!`);
-  } catch (e) { console.error("Ошибка:", e); alert("Ошибка: " + e.message); }
+  } catch (e) { 
+    console.error("❌ Ошибка:", e);
+    alert("Ошибка: " + e.message); 
+  }
 }
 
 function loadAllTasks() {
